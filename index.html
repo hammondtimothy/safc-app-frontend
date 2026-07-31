@@ -293,7 +293,7 @@
 
 <script src="config.js"></script>
 <script>
-  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [] };
+  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [] };
 
   const COUNTRIES = [
     ["England","GB-ENG"],["Scotland","GB-SCT"],["Wales","GB-WLS"],["Northern Ireland","GB-NIR"],
@@ -310,13 +310,32 @@
     ["South Korea","KR"],["Iran","IR"],["Israel","IL"],
   ];
 
-  // Regional-indicator flag emoji from a 2-letter ISO code. UK home nations
-  // don't have real flag emoji, so those get a simple text badge instead.
+  // Regional-indicator flag emoji from a 2-letter ISO code. Real flag emoji
+  // work reliably everywhere, but England/Scotland/Wales use a special
+  // multi-part Unicode sequence with inconsistent device support — when
+  // unsupported it silently falls back to a plain black flag. Rather than
+  // rely on that, those three get a small colored text badge instead.
+  const HOME_NATION_BADGES = {
+    'GB-ENG': '<span style="display:inline-block;background:#fff;color:#CE1124;border:1px solid #CE1124;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">ENG</span>',
+    'GB-SCT': '<span style="display:inline-block;background:#005EB8;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">SCO</span>',
+    'GB-WLS': '<span style="display:inline-block;background:#00843D;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">WAL</span>',
+  };
+
   function flagEmoji(code) {
     if (!code) return '';
-    if (code.startsWith('GB-')) {
-      return { 'GB-ENG': '🏴', 'GB-SCT': '🏴', 'GB-WLS': '🏴', 'GB-NIR': '🇬🇧' }[code] || '🇬🇧';
-    }
+    if (HOME_NATION_BADGES[code]) return HOME_NATION_BADGES[code];
+    if (code === 'GB-NIR') return '🇬🇧';
+    if (code === 'XK') return '🇽🇰';
+    return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
+  }
+
+  // Plain-text-only version for use inside <option> tags, which can't render HTML
+  function flagText(code) {
+    if (!code) return '';
+    if (code === 'GB-ENG') return '🏴 ENG';
+    if (code === 'GB-SCT') return '🏴 SCO';
+    if (code === 'GB-WLS') return '🏴 WAL';
+    if (code === 'GB-NIR') return '🇬🇧';
     if (code === 'XK') return '🇽🇰';
     return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
   }
@@ -452,7 +471,7 @@
         </div>
         <select class="f-nationality">
           <option value="">— Nationality —</option>
-          ${COUNTRIES.map(([name, code]) => `<option value="${code}" ${p.nationality === code ? 'selected' : ''}>${flagEmoji(code)} ${name}</option>`).join('')}
+          ${COUNTRIES.map(([name, code]) => `<option value="${code}" ${p.nationality === code ? 'selected' : ''}>${flagText(code)} ${name}</option>`).join('')}
         </select>
         <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="Note (e.g. on loan at...)" />
         <textarea class="f-bio" placeholder="Short biography — paste from safc.com" style="min-height:60px;">${escapeHtml(p.biography || '')}</textarea>
@@ -613,15 +632,19 @@
 
   async function loadComments() {
     try {
-      const comments = await apiGet('data/comments.json') || [];
+      state.comments = await apiGet('data/comments.json') || [];
       const list = el('commentsList');
-      if (!comments.length) {
+      if (!state.comments.length) {
         list.innerHTML = '<div class="empty">No comments yet</div>';
         return;
       }
-      list.innerHTML = comments.slice().reverse().map(c => `
+      const isOwner = state.config && state.name === state.config.owner;
+      list.innerHTML = state.comments.slice().reverse().map(c => `
         <div class="comment">
-          <div class="meta"><b>${escapeHtml(c.name)}</b> · ${new Date(c.timestamp).toLocaleString()}</div>
+          <div class="meta">
+            <b>${escapeHtml(c.name)}</b> · ${new Date(c.timestamp).toLocaleString()}
+            ${isOwner ? ` · <a href="#" style="color:var(--safc-red);" onclick="deleteComment('${c.id}');return false;">delete</a>` : ''}
+          </div>
           <div>${escapeHtml(c.text)}</div>
         </div>
       `).join('');
@@ -629,6 +652,24 @@
       el('commentsList').innerHTML = `<div class="empty">Couldn't load comments (${err.message})</div>`;
     }
   }
+
+  window.deleteComment = async (id) => {
+    const pin = prompt('Enter owner PIN to delete this comment:');
+    if (!pin) return;
+    try {
+      const remaining = state.comments.filter(c => c.id !== id);
+      const res = await fetch(`${WORKER_URL}/api/owner-write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ file: 'data/comments.json', content: remaining, message: 'Delete comment from app' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      loadComments();
+    } catch (err) {
+      alert(`Failed to delete: ${err.message}`);
+    }
+  };
 
   function escapeHtml(str) {
     const d = document.createElement('div');
