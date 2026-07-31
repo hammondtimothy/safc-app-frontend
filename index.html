@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SAFC Player Ratings</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#EB172B" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --safc-red: #EB172B;
+    --safc-red-dark: #B8101F;
+    --ink: #14110F;
+    --paper: #F7F5F2;
+    --card: #FFFFFF;
+    --line: #E4E0D9;
+    --muted: #6B6560;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header.top {
+    background: var(--safc-red);
+    color: white;
+    padding: calc(env(safe-area-inset-top) + 18px) 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  header.top::after {
+    content: "";
+    position: absolute;
+    top: 0; right: -10%;
+    width: 40%; height: 100%;
+    background: rgba(255,255,255,0.08);
+    transform: skewX(-12deg);
+  }
+  header.top h1 {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  header.top p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px 18px 40px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--safc-red);
+    margin: 0 0 10px;
+  }
+  .name-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .name-btn {
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 10px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .name-btn:active { background: var(--safc-red); color: white; border-color: var(--safc-red); }
+
+  .whoami {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .whoami b { color: var(--ink); }
+  .switch-link {
+    color: var(--safc-red);
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 13px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 70px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    resize: vertical;
+  }
+  button.primary {
+    margin-top: 10px;
+    background: var(--safc-red);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 15px;
+    width: 100%;
+    cursor: pointer;
+  }
+  button.primary:active { background: var(--safc-red-dark); }
+  button.primary:disabled { opacity: 0.5; }
+
+  .comment {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .comment:last-child { border-bottom: none; }
+  .comment .meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .comment .meta b { color: var(--ink); }
+  .empty {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 12px 0;
+  }
+  .status {
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .status.ok { color: #157F3B; }
+  .status.err { color: var(--safc-red); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>SAFC Player Ratings</h1>
+  <p id="seasonLabel">Loading season…</p>
+</header>
+
+<main>
+
+  <!-- Stage 0 status card -->
+  <div class="card" id="setupCard">
+    <p class="eyebrow">Stage 0 check</p>
+    <div id="setupStatus" class="status">Checking connection to the backend…</div>
+  </div>
+
+  <!-- Name picker -->
+  <div class="card" id="pickerCard" style="display:none;">
+    <p class="eyebrow">Who's this?</p>
+    <div class="name-grid" id="nameGrid"></div>
+  </div>
+
+  <!-- Signed-in view -->
+  <div id="signedInArea" style="display:none;">
+    <div class="card">
+      <div class="whoami">
+        <span>Signed in as <b id="currentName"></b></span>
+        <a href="#" class="switch-link" id="switchLink">Not you?</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Test comment</p>
+      <textarea id="commentText" placeholder="Say something about the Lads…"></textarea>
+      <button class="primary" id="postCommentBtn">Post comment</button>
+      <div id="commentStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Recent comments</p>
+      <div id="commentsList"><div class="empty">No comments yet</div></div>
+    </div>
+  </div>
+
+</main>
+
+<script src="config.js"></script>
+<script>
+  const state = { name: localStorage.getItem('safc_name') || null, config: null };
+
+  const el = (id) => document.getElementById(id);
+
+  async function apiGet(file) {
+    const res = await fetch(`${WORKER_URL}/api/data?file=${encodeURIComponent(file)}`);
+    if (!res.ok) throw new Error(`Read failed (${res.status})`);
+    return (await res.json()).content;
+  }
+
+  async function apiPost(path, body) {
+    const res = await fetch(`${WORKER_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return res.json();
+  }
+
+  async function init() {
+    if (!WORKER_URL || WORKER_URL.startsWith('REPLACE')) {
+      el('setupStatus').textContent = 'config.js still has the placeholder Worker URL — edit it with your real Worker URL.';
+      el('setupStatus').className = 'status err';
+      return;
+    }
+    try {
+      const health = await fetch(`${WORKER_URL}/api/health`).then(r => r.json());
+      if (!health.ok) throw new Error('Backend did not report healthy');
+
+      const config = await apiGet('data/config.json');
+      state.config = config || { season: 'unknown', names: [] };
+      el('seasonLabel').textContent = `${state.config.club || 'Sunderland AFC'} · ${state.config.season} season`;
+
+      el('setupStatus').textContent = 'Connected to backend and repo successfully.';
+      el('setupStatus').className = 'status ok';
+      el('setupCard').style.display = 'none'; // hide once healthy, keeps the app clean day-to-day
+
+      renderNamePicker();
+      if (state.name) showSignedIn();
+    } catch (err) {
+      el('setupStatus').textContent = `Connection failed: ${err.message}. Check the Worker URL in config.js and that the Worker is deployed.`;
+      el('setupStatus').className = 'status err';
+    }
+  }
+
+  function renderNamePicker() {
+    const grid = el('nameGrid');
+    grid.innerHTML = '';
+    (state.config.names || []).forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'name-btn';
+      btn.textContent = name;
+      btn.onclick = () => {
+        state.name = name;
+        localStorage.setItem('safc_name', name);
+        showSignedIn();
+      };
+      grid.appendChild(btn);
+    });
+    el('pickerCard').style.display = state.name ? 'none' : 'block';
+  }
+
+  function showSignedIn() {
+    el('pickerCard').style.display = 'none';
+    el('signedInArea').style.display = 'block';
+    el('currentName').textContent = state.name;
+    loadComments();
+  }
+
+  el('switchLink').onclick = (e) => {
+    e.preventDefault();
+    state.name = null;
+    localStorage.removeItem('safc_name');
+    el('signedInArea').style.display = 'none';
+    el('pickerCard').style.display = 'block';
+  };
+
+  el('postCommentBtn').onclick = async () => {
+    const text = el('commentText').value.trim();
+    if (!text) return;
+    el('postCommentBtn').disabled = true;
+    el('commentStatus').textContent = 'Posting…';
+    el('commentStatus').className = 'status';
+    try {
+      await apiPost('/api/comment', { name: state.name, text });
+      el('commentText').value = '';
+      el('commentStatus').textContent = 'Posted.';
+      el('commentStatus').className = 'status ok';
+      loadComments();
+    } catch (err) {
+      el('commentStatus').textContent = `Failed: ${err.message}`;
+      el('commentStatus').className = 'status err';
+    } finally {
+      el('postCommentBtn').disabled = false;
+    }
+  };
+
+  async function loadComments() {
+    try {
+      const comments = await apiGet('data/comments.json') || [];
+      const list = el('commentsList');
+      if (!comments.length) {
+        list.innerHTML = '<div class="empty">No comments yet</div>';
+        return;
+      }
+      list.innerHTML = comments.slice().reverse().map(c => `
+        <div class="comment">
+          <div class="meta"><b>${escapeHtml(c.name)}</b> · ${new Date(c.timestamp).toLocaleString()}</div>
+          <div>${escapeHtml(c.text)}</div>
+        </div>
+      `).join('');
+    } catch (err) {
+      el('commentsList').innerHTML = `<div class="empty">Couldn't load comments (${err.message})</div>`;
+    }
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  init();
+</script>
+</body>
+</html>
