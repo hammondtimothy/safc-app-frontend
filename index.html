@@ -162,6 +162,68 @@
   }
   .status.ok { color: #157F3B; }
   .status.err { color: var(--safc-red); }
+
+  .position-group { margin-bottom: 14px; }
+  .position-group:last-child { margin-bottom: 0; }
+  .position-group h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .player-row:last-child { border-bottom: none; }
+  .player-row .num {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    width: 26px;
+    flex-shrink: 0;
+  }
+  .player-row .name { flex: 1; padding: 0 8px; }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+  }
+  .badge.squad { background: #E7F5EC; color: #157F3B; }
+  .badge.loan { background: #FFF4E0; color: #A8630A; }
+  .badge.academy { background: #E9EEFB; color: #2C4FA6; }
+  .badge.left { background: #F1EFEB; color: var(--muted); }
+
+  .edit-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .edit-row input, .edit-row select {
+    width: 100%;
+    padding: 8px;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+  }
+  .edit-row-fields { display: flex; gap: 6px; }
+  .edit-row-fields input:first-child { width: 54px; flex-shrink: 0; }
+  .remove-player-link {
+    color: var(--safc-red);
+    font-size: 12px;
+    text-decoration: none;
+    align-self: flex-end;
+  }
 </style>
 </head>
 <body>
@@ -206,15 +268,24 @@
       <div id="commentsList"><div class="empty">No comments yet</div></div>
     </div>
 
+    <div class="card">
+      <p class="eyebrow">Squad</p>
+      <div id="squadList"><div class="empty">Loading squad…</div></div>
+    </div>
+
     <div class="card" id="ownerToolsCard" style="display:none;">
       <p class="eyebrow">Owner tools</p>
       <input type="password" id="ownerPin" placeholder="Owner PIN" style="width:100%;padding:12px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:10px;" />
 
-      <button class="primary" id="findTeamBtn" style="background:var(--ink);">1. Find Sunderland's team ID</button>
+      <button class="primary" id="findTeamBtn" style="background:var(--ink);">Find Sunderland's team ID</button>
       <div id="findTeamResults" style="margin-top:10px;"></div>
 
-      <button class="primary" id="syncSquadBtn" style="margin-top:14px;">2. Sync squad from API-Football</button>
+      <button class="primary" id="syncSquadBtn" style="margin-top:14px;background:var(--ink);">Sync squad from API-Football</button>
       <div id="syncStatus" class="status"></div>
+
+      <button class="primary" id="manageSquadBtn" style="margin-top:14px;">Manage squad</button>
+      <div id="manageSquadArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageStatus" class="status"></div>
     </div>
   </div>
 
@@ -222,7 +293,7 @@
 
 <script src="config.js"></script>
 <script>
-  const state = { name: localStorage.getItem('safc_name') || null, config: null };
+  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [] };
 
   const el = (id) => document.getElementById(id);
 
@@ -290,10 +361,129 @@
     el('signedInArea').style.display = 'block';
     el('currentName').textContent = state.name;
     loadComments();
+    loadSquad();
     if (state.config && state.name === state.config.owner) {
       el('ownerToolsCard').style.display = 'block';
     }
   }
+
+  const POSITION_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
+  const POSITION_LABELS = { GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', FWD: 'Forwards' };
+
+  async function loadSquad() {
+    try {
+      state.players = await apiGet('data/players.json') || [];
+      renderSquadList();
+    } catch (err) {
+      el('squadList').innerHTML = `<div class="empty">Couldn't load squad (${err.message})</div>`;
+    }
+  }
+
+  function renderSquadList() {
+    const container = el('squadList');
+    if (!state.players.length) {
+      container.innerHTML = '<div class="empty">No players yet</div>';
+      return;
+    }
+    container.innerHTML = POSITION_ORDER.map(pos => {
+      const players = state.players
+        .filter(p => p.position === pos)
+        .sort((a, b) => (a.squadNumber ?? 999) - (b.squadNumber ?? 999));
+      if (!players.length) return '';
+      const rows = players.map(p => `
+        <div class="player-row">
+          <span class="num">${p.squadNumber ?? '—'}</span>
+          <span class="name">${escapeHtml(p.name)}${p.note ? ` <span style="color:var(--muted);font-size:12px;">— ${escapeHtml(p.note)}</span>` : ''}</span>
+          <span class="badge ${p.status}">${p.status}</span>
+        </div>
+      `).join('');
+      return `<div class="position-group"><h4>${POSITION_LABELS[pos]}</h4>${rows}</div>`;
+    }).join('');
+  }
+
+  el('manageSquadBtn').onclick = () => {
+    const area = el('manageSquadArea');
+    const isOpen = area.style.display === 'block';
+    area.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) renderManageSquad();
+  };
+
+  function renderManageSquad() {
+    const area = el('manageSquadArea');
+    area.innerHTML = state.players.map((p, i) => `
+      <div class="edit-row" data-index="${i}">
+        <div class="edit-row-fields">
+          <input type="number" class="f-number" value="${p.squadNumber ?? ''}" placeholder="#" />
+          <input type="text" class="f-name" value="${escapeHtml(p.name)}" placeholder="Name" />
+        </div>
+        <div class="edit-row-fields">
+          <select class="f-position">
+            ${POSITION_ORDER.map(pos => `<option value="${pos}" ${p.position === pos ? 'selected' : ''}>${pos}</option>`).join('')}
+          </select>
+          <select class="f-status">
+            ${['squad','loan','academy','left'].map(s => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="Note (e.g. on loan at...)" />
+        <a href="#" class="remove-player-link" onclick="removePlayerRow(${i});return false;">Remove player</a>
+      </div>
+    `).join('') + `
+      <button class="primary" style="background:var(--ink);margin-top:10px;" onclick="addPlayerRow()">+ Add player</button>
+      <button class="primary" style="margin-top:8px;" onclick="saveSquad()">Save all changes</button>
+    `;
+  }
+
+  window.addPlayerRow = () => {
+    state.players.push({
+      id: `manual_${Date.now()}`,
+      name: '',
+      squadNumber: null,
+      position: 'MID',
+      age: null,
+      photo: null,
+      status: 'squad',
+      note: '',
+      seasonStats: {},
+    });
+    renderManageSquad();
+  };
+
+  window.removePlayerRow = (index) => {
+    state.players.splice(index, 1);
+    renderManageSquad();
+  };
+
+  window.saveSquad = async () => {
+    const rows = el('manageSquadArea').querySelectorAll('.edit-row');
+    rows.forEach(row => {
+      const i = Number(row.dataset.index);
+      const num = row.querySelector('.f-number').value;
+      state.players[i].squadNumber = num === '' ? null : Number(num);
+      state.players[i].name = row.querySelector('.f-name').value.trim();
+      state.players[i].position = row.querySelector('.f-position').value;
+      state.players[i].status = row.querySelector('.f-status').value;
+      state.players[i].note = row.querySelector('.f-note').value.trim() || null;
+    });
+
+    const pin = el('ownerPin').value;
+    el('manageStatus').textContent = 'Saving…';
+    el('manageStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner-write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ file: 'data/players.json', content: state.players, message: 'Manual squad edit from app' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      el('manageStatus').textContent = 'Saved.';
+      el('manageStatus').className = 'status ok';
+      renderSquadList();
+    } catch (err) {
+      el('manageStatus').textContent = `Failed: ${err.message}`;
+      el('manageStatus').className = 'status err';
+    }
+  };
 
   el('findTeamBtn').onclick = async () => {
     const pin = el('ownerPin').value;
