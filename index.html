@@ -205,6 +205,17 @@
       <p class="eyebrow">Recent comments</p>
       <div id="commentsList"><div class="empty">No comments yet</div></div>
     </div>
+
+    <div class="card" id="ownerToolsCard" style="display:none;">
+      <p class="eyebrow">Owner tools</p>
+      <input type="password" id="ownerPin" placeholder="Owner PIN" style="width:100%;padding:12px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:10px;" />
+
+      <button class="primary" id="findTeamBtn" style="background:var(--ink);">1. Find Sunderland's team ID</button>
+      <div id="findTeamResults" style="margin-top:10px;"></div>
+
+      <button class="primary" id="syncSquadBtn" style="margin-top:14px;">2. Sync squad from API-Football</button>
+      <div id="syncStatus" class="status"></div>
+    </div>
   </div>
 
 </main>
@@ -279,7 +290,68 @@
     el('signedInArea').style.display = 'block';
     el('currentName').textContent = state.name;
     loadComments();
+    if (state.config && state.name === state.config.owner) {
+      el('ownerToolsCard').style.display = 'block';
+    }
   }
+
+  el('findTeamBtn').onclick = async () => {
+    const pin = el('ownerPin').value;
+    el('findTeamResults').innerHTML = 'Searching…';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner/find-team?name=Sunderland`, {
+        headers: { 'X-Owner-Pin': pin },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Search failed');
+      el('findTeamResults').innerHTML = (data.teams || []).map(t => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+          <span>${escapeHtml(t.name)} (${escapeHtml(t.country)}) — ID ${t.teamId}</span>
+          <button class="primary" style="width:auto;padding:8px 12px;margin:0;" onclick="saveTeamId(${t.teamId})">Use this one</button>
+        </div>
+      `).join('') || '<div class="empty">No teams found</div>';
+    } catch (err) {
+      el('findTeamResults').innerHTML = `<div class="status err">${escapeHtml(err.message)}</div>`;
+    }
+  };
+
+  window.saveTeamId = async (teamId) => {
+    const pin = el('ownerPin').value;
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner/set-team`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ teamId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save team');
+      el('findTeamResults').innerHTML = `<div class="status ok">Saved team ID ${teamId}. Now tap "Sync squad".</div>`;
+    } catch (err) {
+      el('findTeamResults').innerHTML = `<div class="status err">${escapeHtml(err.message)}</div>`;
+    }
+  };
+
+  el('syncSquadBtn').onclick = async () => {
+    const pin = el('ownerPin').value;
+    el('syncSquadBtn').disabled = true;
+    el('syncStatus').textContent = 'Syncing…';
+    el('syncStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner/sync-squad`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      el('syncStatus').textContent = `Done — ${data.added} added, ${data.updated} updated, ${data.total} total players.`;
+      el('syncStatus').className = 'status ok';
+    } catch (err) {
+      el('syncStatus').textContent = `Failed: ${err.message}`;
+      el('syncStatus').className = 'status err';
+    } finally {
+      el('syncSquadBtn').disabled = false;
+    }
+  };
 
   el('switchLink').onclick = (e) => {
     e.preventDefault();
