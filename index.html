@@ -343,8 +343,13 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Sync failed');
-      el('syncStatus').textContent = `Done — ${data.added} added, ${data.updated} updated, ${data.total} total players.`;
-      el('syncStatus').className = 'status ok';
+      if (data.diagnostic) {
+        el('syncStatus').textContent = `${data.diagnostic.message} (API results: ${data.diagnostic.apiResults})`;
+        el('syncStatus').className = 'status err';
+      } else {
+        el('syncStatus').textContent = `Done — ${data.added} added, ${data.updated} updated, ${data.total} total players.`;
+        el('syncStatus').className = 'status ok';
+      }
     } catch (err) {
       el('syncStatus').textContent = `Failed: ${err.message}`;
       el('syncStatus').className = 'status err';
