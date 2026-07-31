@@ -313,12 +313,13 @@
       <button class="primary" id="syncSquadBtn" style="margin-top:14px;background:var(--ink);">Sync squad from API-Football</button>
       <div id="syncStatus" class="status"></div>
 
-      <button class="primary" id="syncFixturesBtn" style="margin-top:14px;background:var(--ink);">Sync fixtures from API-Football</button>
-      <div id="syncFixturesStatus" class="status"></div>
-
       <button class="primary" id="manageSquadBtn" style="margin-top:14px;">Manage squad</button>
       <div id="manageSquadArea" style="margin-top:12px;display:none;"></div>
       <div id="manageStatus" class="status"></div>
+
+      <button class="primary" id="manageFixturesBtn" style="margin-top:14px;">Manage fixtures</button>
+      <div id="manageFixturesArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageFixturesStatus" class="status"></div>
     </div>
   </div>
 
@@ -526,29 +527,6 @@
     }).join('');
   }
 
-  el('syncFixturesBtn').onclick = async () => {
-    const pin = el('ownerPin').value;
-    el('syncFixturesBtn').disabled = true;
-    el('syncFixturesStatus').textContent = 'Syncing…';
-    el('syncFixturesStatus').className = 'status';
-    try {
-      const res = await fetch(`${WORKER_URL}/api/owner/sync-fixtures`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Sync failed');
-      el('syncFixturesStatus').textContent = `Done — ${data.total} fixtures synced.`;
-      el('syncFixturesStatus').className = 'status ok';
-      loadFixtures();
-    } catch (err) {
-      el('syncFixturesStatus').textContent = `Failed: ${err.message}`;
-      el('syncFixturesStatus').className = 'status err';
-    } finally {
-      el('syncFixturesBtn').disabled = false;
-    }
-  };
-
   el('manageSquadBtn').onclick = () => {
     const area = el('manageSquadArea');
     const isOpen = area.style.display === 'block';
@@ -639,6 +617,150 @@
     } catch (err) {
       el('manageStatus').textContent = `Failed: ${err.message}`;
       el('manageStatus').className = 'status err';
+    }
+  };
+
+  el('manageFixturesBtn').onclick = () => {
+    const area = el('manageFixturesArea');
+    const isOpen = area.style.display === 'block';
+    area.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) renderManageFixtures();
+  };
+
+  const FIXTURE_STATUSES = [
+    ['NS', 'Scheduled'],
+    ['FT', 'Full time'],
+    ['AET', 'After extra time'],
+    ['PEN', 'Decided on penalties'],
+    ['PST', 'Postponed'],
+    ['CANC', 'Cancelled'],
+  ];
+  const COMPETITIONS = ['Premier League', 'FA Cup', 'EFL Cup', 'UEFA Europa League', 'Other'];
+
+  // Splits a fixture's stored ISO date into separate date/time input values,
+  // and figures out the opponent name regardless of home/away.
+  function fixtureToFormValues(f) {
+    const d = new Date(f.date);
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const opponent = f.isHome ? f.awayTeam : f.homeTeam;
+    return { dateStr, timeStr, opponent };
+  }
+
+  function renderManageFixtures() {
+    const area = el('manageFixturesArea');
+    const sorted = state.fixtures.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    area.innerHTML = sorted.map((f) => {
+      const { dateStr, timeStr, opponent } = fixtureToFormValues(f);
+      return `
+      <div class="edit-row" data-id="${f.id}">
+        <div class="edit-row-fields">
+          <input type="date" class="fx-date" value="${dateStr}" />
+          <input type="time" class="fx-time" value="${timeStr}" />
+        </div>
+        <div class="edit-row-fields">
+          <input type="text" class="fx-opponent" value="${escapeHtml(opponent)}" placeholder="Opponent" style="flex:1;" />
+          <select class="fx-venue" style="width:70px;flex-shrink:0;">
+            <option value="H" ${f.isHome ? 'selected' : ''}>Home</option>
+            <option value="A" ${!f.isHome ? 'selected' : ''}>Away</option>
+          </select>
+        </div>
+        <div class="edit-row-fields">
+          <select class="fx-competition">
+            ${COMPETITIONS.map(c => `<option value="${c}" ${f.competition === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+          <input type="text" class="fx-round" value="${escapeHtml(f.round || '')}" placeholder="Round / Matchday" />
+        </div>
+        <div class="edit-row-fields">
+          <select class="fx-status">
+            ${FIXTURE_STATUSES.map(([code, label]) => `<option value="${code}" ${f.status === code ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+          <input type="number" class="fx-home-score" value="${f.homeScore ?? ''}" placeholder="Home score" min="0" />
+          <input type="number" class="fx-away-score" value="${f.awayScore ?? ''}" placeholder="Away score" min="0" />
+        </div>
+        <a href="#" class="remove-player-link" onclick="removeFixtureRow('${f.id}');return false;">Remove fixture</a>
+      </div>
+    `;
+    }).join('') + `
+      <button class="primary" style="background:var(--ink);margin-top:10px;" onclick="addFixtureRow()">+ Add fixture</button>
+      <button class="primary" style="margin-top:8px;" onclick="saveFixtures()">Save all changes</button>
+    `;
+  }
+
+  window.addFixtureRow = () => {
+    state.fixtures.push({
+      id: `manual_${Date.now()}`,
+      date: new Date().toISOString(),
+      status: 'NS',
+      venue: null,
+      competition: 'Premier League',
+      round: '',
+      homeTeam: state.config?.club || 'Sunderland AFC',
+      awayTeam: '',
+      isHome: true,
+      homeScore: null,
+      awayScore: null,
+    });
+    renderManageFixtures();
+  };
+
+  window.removeFixtureRow = (id) => {
+    state.fixtures = state.fixtures.filter(f => f.id !== id);
+    renderManageFixtures();
+  };
+
+  window.saveFixtures = async () => {
+    const club = state.config?.club || 'Sunderland AFC';
+    const rows = el('manageFixturesArea').querySelectorAll('.edit-row');
+    const updated = [];
+    rows.forEach(row => {
+      const id = row.dataset.id;
+      const existing = state.fixtures.find(f => f.id === id) || {};
+      const dateStr = row.querySelector('.fx-date').value;
+      const timeStr = row.querySelector('.fx-time').value || '15:00';
+      const opponent = row.querySelector('.fx-opponent').value.trim();
+      const isHome = row.querySelector('.fx-venue').value === 'H';
+      const competition = row.querySelector('.fx-competition').value;
+      const round = row.querySelector('.fx-round').value.trim();
+      const status = row.querySelector('.fx-status').value;
+      const homeScoreVal = row.querySelector('.fx-home-score').value;
+      const awayScoreVal = row.querySelector('.fx-away-score').value;
+      updated.push({
+        ...existing,
+        id,
+        date: dateStr ? new Date(`${dateStr}T${timeStr}:00`).toISOString() : existing.date,
+        status,
+        venue: existing.venue ?? (isHome ? 'Stadium of Light' : null),
+        competition,
+        round: round || null,
+        homeTeam: isHome ? club : opponent,
+        awayTeam: isHome ? opponent : club,
+        isHome,
+        homeScore: homeScoreVal === '' ? null : Number(homeScoreVal),
+        awayScore: awayScoreVal === '' ? null : Number(awayScoreVal),
+      });
+    });
+    updated.sort((a, b) => new Date(a.date) - new Date(b.date));
+    state.fixtures = updated;
+
+    const pin = el('ownerPin').value;
+    el('manageFixturesStatus').textContent = 'Saving…';
+    el('manageFixturesStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner-write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ file: 'data/fixtures.json', content: state.fixtures, message: 'Manual fixtures edit from app' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      el('manageFixturesStatus').textContent = 'Saved.';
+      el('manageFixturesStatus').className = 'status ok';
+      renderFixturesList();
+    } catch (err) {
+      el('manageFixturesStatus').textContent = `Failed: ${err.message}`;
+      el('manageFixturesStatus').className = 'status err';
     }
   };
 
