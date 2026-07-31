@@ -366,9 +366,9 @@
   // Plain-text-only version for use inside <option> tags, which can't render HTML
   function flagText(code) {
     if (!code) return '';
-    if (code === 'GB-ENG') return '🏴 ENG';
-    if (code === 'GB-SCT') return '🏴 SCO';
-    if (code === 'GB-WLS') return '🏴 WAL';
+    if (code === 'GB-ENG') return 'ENG';
+    if (code === 'GB-SCT') return 'SCO';
+    if (code === 'GB-WLS') return 'WAL';
     if (code === 'GB-NIR') return '🇬🇧';
     if (code === 'XK') return '🇽🇰';
     return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
