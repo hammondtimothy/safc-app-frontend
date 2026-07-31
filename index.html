@@ -344,26 +344,45 @@
     ["South Korea","KR"],["Iran","IR"],["Israel","IL"],
   ];
 
-  // Regional-indicator flag emoji from a 2-letter ISO code. Real flag emoji
-  // work reliably everywhere, but England/Scotland/Wales use a special
-  // multi-part Unicode sequence with inconsistent device support — when
-  // unsupported it silently falls back to a plain black flag. Rather than
-  // rely on that, those three get a small colored text badge instead.
-  const HOME_NATION_BADGES = {
-    'GB-ENG': '<span style="display:inline-block;background:#fff;color:#CE1124;border:1px solid #CE1124;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">ENG</span>',
-    'GB-SCT': '<span style="display:inline-block;background:#005EB8;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">SCO</span>',
-    'GB-WLS': '<span style="display:inline-block;background:#00843D;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;font-weight:700;">WAL</span>',
+  // Real flag emoji work reliably everywhere, but England/Scotland/Wales use a
+  // special multi-part Unicode sequence with inconsistent device support — when
+  // unsupported it silently falls back to a plain black flag. Rather than rely
+  // on that (or a text-only badge), those three get a small hand-drawn inline
+  // SVG flag instead, sized to sit inline with the emoji flags used elsewhere.
+  const HOME_NATION_FLAG_SVGS = {
+    'GB-ENG': `<svg viewBox="0 0 60 36" width="1.5em" height="0.9em" style="vertical-align:-0.1em;flex-shrink:0;">
+      <rect width="60" height="36" fill="#FFFFFF"/>
+      <rect x="24" width="12" height="36" fill="#CE1124"/>
+      <rect y="12" width="60" height="12" fill="#CE1124"/>
+    </svg>`,
+    'GB-SCT': `<svg viewBox="0 0 60 36" width="1.5em" height="0.9em" style="vertical-align:-0.1em;flex-shrink:0;">
+      <rect width="60" height="36" fill="#005EB8"/>
+      <polygon points="0,0 8,0 60,32 60,36 52,36 0,4" fill="#FFFFFF"/>
+      <polygon points="60,0 52,0 0,32 0,36 8,36 60,4" fill="#FFFFFF"/>
+    </svg>`,
+    'GB-WLS': `<svg viewBox="0 0 60 36" width="1.5em" height="0.9em" style="vertical-align:-0.1em;flex-shrink:0;">
+      <rect width="60" height="18" fill="#FFFFFF"/>
+      <rect y="18" width="60" height="18" fill="#00843D"/>
+      <path d="M18,26 C14,24 13,19 16,16 C14,14 15,10 19,10 C20,7 24,6 27,8
+               C29,6 33,7 33,10 C37,9 40,12 38,15 C41,16 41,20 38,21
+               C39,24 36,27 32,25 C31,28 26,29 24,26 C22,28 19,28 18,26 Z"
+            fill="#C8102E"/>
+      <path d="M33,10 L41,5 L38,12 Z" fill="#C8102E"/>
+      <path d="M16,16 L8,13 L14,20 Z" fill="#C8102E"/>
+      <path d="M27,20 L24,24" stroke="#C8102E" stroke-width="1.5" fill="none"/>
+    </svg>`,
   };
 
   function flagEmoji(code) {
     if (!code) return '';
-    if (HOME_NATION_BADGES[code]) return HOME_NATION_BADGES[code];
+    if (HOME_NATION_FLAG_SVGS[code]) return HOME_NATION_FLAG_SVGS[code];
     if (code === 'GB-NIR') return '🇬🇧';
     if (code === 'XK') return '🇽🇰';
     return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
   }
 
-  // Plain-text-only version for use inside <option> tags, which can't render HTML
+  // Plain-text-only version for use inside <option> tags, which can't render
+  // SVG/HTML at all — this stays text-only regardless of the fix above.
   function flagText(code) {
     if (!code) return '';
     if (code === 'GB-ENG') return 'ENG';
