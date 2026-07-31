@@ -224,6 +224,31 @@
     text-decoration: none;
     align-self: flex-end;
   }
+
+  .fixture-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .fixture-row:last-child { border-bottom: none; }
+  .fixture-row .comp {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+  }
+  .fixture-row .match-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 3px;
+  }
+  .fixture-row .teams { font-weight: 600; }
+  .fixture-row .datetime { color: var(--muted); font-size: 13px; }
+  .fixture-row .score {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
 </style>
 </head>
 <body>
@@ -269,6 +294,11 @@
     </div>
 
     <div class="card">
+      <p class="eyebrow">Fixtures</p>
+      <div id="fixturesList"><div class="empty">Loading fixtures…</div></div>
+    </div>
+
+    <div class="card">
       <p class="eyebrow">Squad</p>
       <div id="squadList"><div class="empty">Loading squad…</div></div>
     </div>
@@ -283,6 +313,9 @@
       <button class="primary" id="syncSquadBtn" style="margin-top:14px;background:var(--ink);">Sync squad from API-Football</button>
       <div id="syncStatus" class="status"></div>
 
+      <button class="primary" id="syncFixturesBtn" style="margin-top:14px;background:var(--ink);">Sync fixtures from API-Football</button>
+      <div id="syncFixturesStatus" class="status"></div>
+
       <button class="primary" id="manageSquadBtn" style="margin-top:14px;">Manage squad</button>
       <div id="manageSquadArea" style="margin-top:12px;display:none;"></div>
       <div id="manageStatus" class="status"></div>
@@ -293,7 +326,7 @@
 
 <script src="config.js"></script>
 <script>
-  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [] };
+  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [], fixtures: [] };
 
   const COUNTRIES = [
     ["England","GB-ENG"],["Scotland","GB-SCT"],["Wales","GB-WLS"],["Northern Ireland","GB-NIR"],
@@ -407,6 +440,7 @@
     el('currentName').textContent = state.name;
     loadComments();
     loadSquad();
+    loadFixtures();
     if (state.config && state.name === state.config.owner) {
       el('ownerToolsCard').style.display = 'block';
     }
@@ -445,6 +479,75 @@
       return `<div class="position-group"><h4>${POSITION_LABELS[pos]}</h4>${rows}</div>`;
     }).join('');
   }
+
+  function formatFixtureDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+      ', ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function loadFixtures() {
+    try {
+      state.fixtures = await apiGet('data/fixtures.json') || [];
+      renderFixturesList();
+    } catch (err) {
+      el('fixturesList').innerHTML = `<div class="empty">Couldn't load fixtures (${err.message})</div>`;
+    }
+  }
+
+  function renderFixturesList() {
+    const container = el('fixturesList');
+    if (!state.fixtures.length) {
+      container.innerHTML = '<div class="empty">No fixtures yet — tap "Sync fixtures" in Owner tools</div>';
+      return;
+    }
+    container.innerHTML = state.fixtures.map(f => {
+      const opponent = f.isHome ? f.awayTeam : f.homeTeam;
+      const venueTag = f.isHome ? 'H' : 'A';
+      let scoreOrTime;
+      if (['FT', 'AET', 'PEN'].includes(f.status)) {
+        scoreOrTime = `<span class="score">${f.homeScore} - ${f.awayScore}</span>`;
+      } else if (f.status === 'PST') {
+        scoreOrTime = '<span class="datetime">Postponed</span>';
+      } else if (f.status === 'CANC') {
+        scoreOrTime = '<span class="datetime">Cancelled</span>';
+      } else {
+        scoreOrTime = `<span class="datetime">${formatFixtureDate(f.date)}</span>`;
+      }
+      return `
+        <div class="fixture-row">
+          <div class="comp">${escapeHtml(f.competition)}${f.round ? ' · ' + escapeHtml(f.round) : ''}</div>
+          <div class="match-line">
+            <span class="teams">${venueTag} vs ${escapeHtml(opponent)}</span>
+            ${scoreOrTime}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  el('syncFixturesBtn').onclick = async () => {
+    const pin = el('ownerPin').value;
+    el('syncFixturesBtn').disabled = true;
+    el('syncFixturesStatus').textContent = 'Syncing…';
+    el('syncFixturesStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner/sync-fixtures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      el('syncFixturesStatus').textContent = `Done — ${data.total} fixtures synced.`;
+      el('syncFixturesStatus').className = 'status ok';
+      loadFixtures();
+    } catch (err) {
+      el('syncFixturesStatus').textContent = `Failed: ${err.message}`;
+      el('syncFixturesStatus').className = 'status err';
+    } finally {
+      el('syncFixturesBtn').disabled = false;
+    }
+  };
 
   el('manageSquadBtn').onclick = () => {
     const area = el('manageSquadArea');
