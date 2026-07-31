@@ -295,6 +295,32 @@
 <script>
   const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [] };
 
+  const COUNTRIES = [
+    ["England","GB-ENG"],["Scotland","GB-SCT"],["Wales","GB-WLS"],["Northern Ireland","GB-NIR"],
+    ["Republic of Ireland","IE"],["France","FR"],["Germany","DE"],["Netherlands","NL"],["Belgium","BE"],
+    ["Portugal","PT"],["Spain","ES"],["Italy","IT"],["Switzerland","CH"],["Austria","AT"],["Denmark","DK"],
+    ["Norway","NO"],["Sweden","SE"],["Finland","FI"],["Iceland","IS"],["Poland","PL"],["Czech Republic","CZ"],
+    ["Slovakia","SK"],["Hungary","HU"],["Romania","RO"],["Croatia","HR"],["Serbia","RS"],["Slovenia","SI"],
+    ["Bosnia and Herzegovina","BA"],["Montenegro","ME"],["North Macedonia","MK"],["Albania","AL"],["Kosovo","XK"],
+    ["Greece","GR"],["Turkey","TR"],["Ukraine","UA"],["Russia","RU"],["Ghana","GH"],["Nigeria","NG"],
+    ["Senegal","SN"],["Ivory Coast","CI"],["Mali","ML"],["Guinea","GN"],["DR Congo","CD"],["Cameroon","CM"],
+    ["Morocco","MA"],["Algeria","DZ"],["Tunisia","TN"],["Egypt","EG"],["South Africa","ZA"],["Brazil","BR"],
+    ["Argentina","AR"],["Uruguay","UY"],["Paraguay","PY"],["Colombia","CO"],["Chile","CL"],["USA","US"],
+    ["Canada","CA"],["Jamaica","JM"],["Trinidad and Tobago","TT"],["Australia","AU"],["Japan","JP"],
+    ["South Korea","KR"],["Iran","IR"],["Israel","IL"],
+  ];
+
+  // Regional-indicator flag emoji from a 2-letter ISO code. UK home nations
+  // don't have real flag emoji, so those get a simple text badge instead.
+  function flagEmoji(code) {
+    if (!code) return '';
+    if (code.startsWith('GB-')) {
+      return { 'GB-ENG': '🏴', 'GB-SCT': '🏴', 'GB-WLS': '🏴', 'GB-NIR': '🇬🇧' }[code] || '🇬🇧';
+    }
+    if (code === 'XK') return '🇽🇰';
+    return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
+  }
+
   const el = (id) => document.getElementById(id);
 
   async function apiGet(file) {
@@ -393,7 +419,7 @@
       const rows = players.map(p => `
         <div class="player-row">
           <span class="num">${p.squadNumber ?? '—'}</span>
-          <span class="name">${escapeHtml(p.name)}${p.note ? ` <span style="color:var(--muted);font-size:12px;">— ${escapeHtml(p.note)}</span>` : ''}</span>
+          <span class="name">${flagEmoji(p.nationality)} ${escapeHtml(p.name)}${p.note ? ` <span style="color:var(--muted);font-size:12px;">— ${escapeHtml(p.note)}</span>` : ''}</span>
           <span class="badge ${p.status}">${p.status}</span>
         </div>
       `).join('');
@@ -424,7 +450,12 @@
             ${['squad','loan','academy','left'].map(s => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
+        <select class="f-nationality">
+          <option value="">— Nationality —</option>
+          ${COUNTRIES.map(([name, code]) => `<option value="${code}" ${p.nationality === code ? 'selected' : ''}>${flagEmoji(code)} ${name}</option>`).join('')}
+        </select>
         <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="Note (e.g. on loan at...)" />
+        <textarea class="f-bio" placeholder="Short biography — paste from safc.com" style="min-height:60px;">${escapeHtml(p.biography || '')}</textarea>
         <a href="#" class="remove-player-link" onclick="removePlayerRow(${i});return false;">Remove player</a>
       </div>
     `).join('') + `
@@ -443,6 +474,8 @@
       photo: null,
       status: 'squad',
       note: '',
+      nationality: null,
+      biography: '',
       seasonStats: {},
     });
     renderManageSquad();
@@ -462,6 +495,8 @@
       state.players[i].name = row.querySelector('.f-name').value.trim();
       state.players[i].position = row.querySelector('.f-position').value;
       state.players[i].status = row.querySelector('.f-status').value;
+      state.players[i].nationality = row.querySelector('.f-nationality').value || null;
+      state.players[i].biography = row.querySelector('.f-bio').value.trim();
       state.players[i].note = row.querySelector('.f-note').value.trim() || null;
     });
 
