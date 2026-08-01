@@ -218,6 +218,14 @@
   }
   .edit-row-fields { display: flex; gap: 6px; }
   .edit-row-fields input:first-child { width: 54px; flex-shrink: 0; }
+  .field-group { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .field-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+  }
   .remove-player-link {
     color: var(--safc-red);
     font-size: 12px;
@@ -878,23 +886,53 @@
         <div class="edit-row" data-player-id="${p.id}" data-player-name="${escapeHtml(p.name)}">
           <div style="font-weight:600;font-size:13px;">${p.squadNumber ?? '—'} · ${escapeHtml(p.name)}</div>
           <div class="edit-row-fields">
-            <select class="ms-appearance">
-              ${APPEARANCE_OPTIONS.map(([v, l]) => `<option value="${v}" ${appearance === v ? 'selected' : ''}>${l}</option>`).join('')}
-            </select>
-            <input type="number" class="ms-minutes" value="${r.minutes ?? ''}" placeholder="Mins" min="0" max="120" />
-            <input type="number" class="ms-rating" value="${r.rating ?? ''}" placeholder="Rating" step="0.1" min="0" max="10" />
+            <div class="field-group">
+              <label class="field-label">Involvement</label>
+              <select class="ms-appearance">
+                ${APPEARANCE_OPTIONS.map(([v, l]) => `<option value="${v}" ${appearance === v ? 'selected' : ''}>${l}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Minutes</label>
+              <input type="number" class="ms-minutes" value="${r.minutes ?? ''}" placeholder="0" min="0" max="120" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Rating</label>
+              <input type="number" class="ms-rating" value="${r.rating ?? ''}" placeholder="—" step="0.1" min="0" max="10" />
+            </div>
           </div>
           <div class="edit-row-fields">
-            <input type="number" class="ms-goals" value="${r.goals ?? 0}" placeholder="Goals" min="0" />
-            <input type="number" class="ms-assists" value="${r.assists ?? 0}" placeholder="Assists" min="0" />
-            <input type="number" class="ms-yellow" value="${r.yellowCards ?? 0}" placeholder="Yellow" min="0" max="2" />
-            <input type="number" class="ms-red" value="${r.redCards ?? 0}" placeholder="Red" min="0" max="1" />
+            <div class="field-group">
+              <label class="field-label">Goals</label>
+              <input type="number" class="ms-goals" value="${r.goals ?? 0}" min="0" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Assists</label>
+              <input type="number" class="ms-assists" value="${r.assists ?? 0}" min="0" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Yellow</label>
+              <input type="number" class="ms-yellow" value="${r.yellowCards ?? 0}" min="0" max="2" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Red</label>
+              <input type="number" class="ms-red" value="${r.redCards ?? 0}" min="0" max="1" />
+            </div>
           </div>
           <div class="edit-row-fields">
-            <input type="number" class="ms-sub-on" value="${r.subOnMinute ?? ''}" placeholder="Sub on min" min="0" max="120" />
-            <input type="number" class="ms-sub-off" value="${r.subOffMinute ?? ''}" placeholder="Sub off min" min="0" max="120" />
+            <div class="field-group">
+              <label class="field-label">Sub on (min)</label>
+              <input type="number" class="ms-sub-on" value="${r.subOnMinute ?? ''}" placeholder="—" min="0" max="120" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Sub off (min)</label>
+              <input type="number" class="ms-sub-off" value="${r.subOffMinute ?? ''}" placeholder="—" min="0" max="120" />
+            </div>
           </div>
-          <input type="text" class="ms-notes" value="${escapeHtml(r.notes || '')}" placeholder="Notes (optional)" />
+          <div class="field-group">
+            <label class="field-label">Notes</label>
+            <input type="text" class="ms-notes" value="${escapeHtml(r.notes || '')}" placeholder="Optional" />
+          </div>
         </div>
       `;
     }).join('');
