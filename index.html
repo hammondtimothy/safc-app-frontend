@@ -1111,15 +1111,36 @@
       <p class="eyebrow" style="margin-top:16px;">Squad — review &amp; edit</p>
       <div id="msPlayerRows"></div>
 
-      <button class="primary" style="margin-top:10px;" onclick="saveMatchStats()">Save match stats</button>
+      <div id="msSaveConfirm" style="margin-top:14px;padding:10px 12px;background:var(--paper);border:1.5px solid var(--safc-red);border-radius:10px;font-size:13px;font-weight:600;"></div>
+      <button class="primary" style="margin-top:8px;" onclick="saveMatchStats()">Save match stats</button>
+
+      <a href="#" class="remove-player-link" style="display:block;text-align:center;margin-top:16px;" onclick="resetAllMatchStats();return false;">Reset ALL match stats (wipes every match — use for clearing test data)</a>
     `;
+
+    updateMatchStatsSaveConfirm();
 
     el('msFixtureSelect').onchange = (e) => {
       matchStatsSelectedFixture = e.target.value;
       renderMatchStatsPlayerRows();
+      updateMatchStatsSaveConfirm();
     };
 
     renderMatchStatsPlayerRows();
+  }
+
+  // A highly visible reminder of exactly which fixture "Save" will write to —
+  // added after a mix-up where a second match's stats were saved under the
+  // first match's id because the dropdown selection wasn't re-checked before
+  // hitting Save.
+  function updateMatchStatsSaveConfirm() {
+    const matchId = matchStatsSelectedFixture;
+    const fixture = state.fixtures.find(f => f.id === matchId);
+    const box = el('msSaveConfirm');
+    if (!box) return;
+    if (!fixture) { box.textContent = 'No fixture selected.'; return; }
+    const opponent = fixture.isHome ? fixture.awayTeam : fixture.homeTeam;
+    const venueTag = fixture.isHome ? 'H' : 'A';
+    box.innerHTML = `Saving to: <span style="color:var(--safc-red);">${formatFixtureDate(fixture.date).split(',')[0]} · ${venueTag} vs ${escapeHtml(opponent)}</span> — check this is the right match before saving.`;
   }
 
   function renderMatchStatsPlayerRows() {
@@ -1237,6 +1258,33 @@
       ? `Filled ${matched} row(s). Couldn't match: ${unmatched.join(', ')}`
       : `Filled ${matched} row(s) from JSON. Review below, then Save.`;
     el('msJsonStatus').className = unmatched.length ? 'status err' : 'status ok';
+  };
+
+  // Wipes every match-stats record for every fixture — deliberately blunt (no
+  // per-match option) since its job is clearing out test/dummy data in one go,
+  // both now (recovering from a mix-up) and later (right before kickoff).
+  window.resetAllMatchStats = async () => {
+    const sure = confirm('This permanently deletes ALL match stats for every fixture, not just the one currently selected. This cannot be undone. Continue?');
+    if (!sure) return;
+    const pin = el('ownerPin').value;
+    el('manageMatchStatsStatus').textContent = 'Resetting…';
+    el('manageMatchStatsStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner-write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ file: 'data/match-stats.json', content: [], message: 'Reset all match stats' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Reset failed');
+      state.matchStats = [];
+      renderMatchStatsPlayerRows();
+      el('manageMatchStatsStatus').textContent = 'All match stats cleared. Start fresh from here.';
+      el('manageMatchStatsStatus').className = 'status ok';
+    } catch (err) {
+      el('manageMatchStatsStatus').textContent = `Reset failed: ${err.message}`;
+      el('manageMatchStatsStatus').className = 'status err';
+    }
   };
 
   window.saveMatchStats = async () => {
