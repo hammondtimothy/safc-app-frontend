@@ -34,37 +34,85 @@
     min-height: 100vh;
     padding-bottom: env(safe-area-inset-bottom);
   }
-  header.top {
+  .top-bar {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    padding: calc(env(safe-area-inset-top) + 10px) 18px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--muted);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .top-bar b { color: var(--ink); }
+  .tab-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 50;
+  }
+  .tab-bar-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 8px 0 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab-bar-btn.active { color: var(--safc-red); }
+  .tab-bar-icon { display: flex; }
+  .tab-bar-icon svg { width: 20px; height: 20px; }
+
+  .hero-card {
     background: var(--safc-red);
     color: white;
-    padding: calc(env(safe-area-inset-top) + 18px) 20px 22px;
-    position: relative;
-    overflow: hidden;
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
   }
-  header.top::after {
-    content: "";
-    position: absolute;
-    top: 0; right: -10%;
-    width: 40%; height: 100%;
-    background: rgba(255,255,255,0.08);
-    transform: skewX(-12deg);
-  }
-  header.top h1 {
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 22px;
-    letter-spacing: 0.5px;
-    margin: 0;
-    text-transform: uppercase;
-  }
-  header.top p {
-    margin: 4px 0 0;
+  .hero-crest-img, .hero-crest-fallback { width: 40px; height: 40px; display: block; margin-bottom: 8px; }
+  .hero-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; font-weight: 700; }
+  .hero-teams { font-size: 17px; font-weight: 700; margin-top: 4px; font-family: 'Archivo Black', sans-serif; }
+  .hero-meta { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+  .stats-table-header, .stats-table-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 34px 24px 24px 42px;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
     font-size: 13px;
-    opacity: 0.85;
   }
+  .stats-table-header {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--line);
+  }
+  .stats-table-row { cursor: pointer; }
+  .stats-table-row:last-child { border-bottom: none; }
+  .st-rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .st-col { text-align: center; font-variant-numeric: tabular-nums; }
+  .st-avg { font-weight: 700; }
   main {
     max-width: 480px;
     margin: 0 auto;
-    padding: 20px 18px 40px;
+    padding: 16px 18px calc(88px + env(safe-area-inset-bottom));
   }
   .card {
     background: var(--card);
@@ -383,10 +431,10 @@
 </head>
 <body>
 
-<header class="top">
-  <h1>SAFC Player Ratings</h1>
-  <p id="seasonLabel">Loading season…</p>
-</header>
+<div class="top-bar" id="topBar" style="display:none;">
+  <span>Signed in as <b id="currentName"></b></span>
+  <a href="#" class="switch-link" id="switchLink">Not you?</a>
+</div>
 
 <main>
 
@@ -402,62 +450,54 @@
     <div class="name-grid" id="nameGrid"></div>
   </div>
 
-  <!-- Signed-in view -->
+  <!-- Signed-in view: one tab panel per bottom-bar tab -->
   <div id="signedInArea" style="display:none;">
-    <div class="card">
-      <div class="whoami">
-        <span>Signed in as <b id="currentName"></b></span>
-        <a href="#" class="switch-link" id="switchLink">Not you?</a>
+
+    <section id="tab-home">
+      <div id="nextFixtureCard"></div>
+      <div class="card">
+        <p class="eyebrow">Post a comment</p>
+        <textarea id="commentText" placeholder="Say something about the Lads…"></textarea>
+        <button class="primary" id="postCommentBtn">Post comment</button>
+        <div id="commentStatus" class="status"></div>
       </div>
-    </div>
+      <div class="card">
+        <p class="eyebrow">Recent comments</p>
+        <div id="commentsList"><div class="empty">No comments yet</div></div>
+      </div>
+    </section>
 
-    <div class="card">
-      <p class="eyebrow">Test comment</p>
-      <textarea id="commentText" placeholder="Say something about the Lads…"></textarea>
-      <button class="primary" id="postCommentBtn">Post comment</button>
-      <div id="commentStatus" class="status"></div>
-    </div>
+    <section id="tab-squad" style="display:none;">
+      <div class="card">
+        <p class="eyebrow">Squad</p>
+        <div id="squadList"><div class="empty">Loading squad…</div></div>
+      </div>
+    </section>
 
-    <div class="card">
-      <p class="eyebrow">Recent comments</p>
-      <div id="commentsList"><div class="empty">No comments yet</div></div>
-    </div>
+    <section id="tab-fixtures" style="display:none;">
+      <div class="card">
+        <p class="eyebrow">Fixtures</p>
+        <div id="fixturesList"><div class="empty">Loading fixtures…</div></div>
+      </div>
+    </section>
 
-    <div class="card">
-      <p class="eyebrow">Fixtures</p>
-      <div id="fixturesList"><div class="empty">Loading fixtures…</div></div>
-    </div>
+    <section id="tab-stats" style="display:none;">
+      <div class="card">
+        <p class="eyebrow">Season stats</p>
+        <div id="statsStatus" class="status" style="margin-bottom:10px;"></div>
+        <div id="statsTable"></div>
+      </div>
+    </section>
 
-    <div class="card">
-      <p class="eyebrow">Squad</p>
-      <div id="squadList"><div class="empty">Loading squad…</div></div>
-    </div>
+    <section id="tab-admin" style="display:none;"></section>
 
-    <div class="card" id="ownerToolsCard" style="display:none;">
-      <p class="eyebrow">Owner tools</p>
-      <input type="password" id="ownerPin" placeholder="Owner PIN" style="width:100%;padding:12px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:10px;" />
-
-      <button class="primary" id="findTeamBtn" style="background:var(--ink);">Find Sunderland's team ID</button>
-      <div id="findTeamResults" style="margin-top:10px;"></div>
-
-      <button class="primary" id="syncSquadBtn" style="margin-top:14px;background:var(--ink);">Sync squad from API-Football</button>
-      <div id="syncStatus" class="status"></div>
-
-      <button class="primary" id="manageSquadBtn" style="margin-top:14px;">Manage squad</button>
-      <div id="manageSquadArea" style="margin-top:12px;display:none;"></div>
-      <div id="manageStatus" class="status"></div>
-
-      <button class="primary" id="manageFixturesBtn" style="margin-top:14px;">Manage fixtures</button>
-      <div id="manageFixturesArea" style="margin-top:12px;display:none;"></div>
-      <div id="manageFixturesStatus" class="status"></div>
-
-      <button class="primary" id="manageMatchStatsBtn" style="margin-top:14px;">Manage match stats</button>
-      <div id="manageMatchStatsArea" style="margin-top:12px;display:none;"></div>
-      <div id="manageMatchStatsStatus" class="status"></div>
-    </div>
   </div>
 
 </main>
+
+<!-- Bottom tab bar — built by JS so the Admin tab is only ever added to the
+     DOM for the owner, not just hidden by CSS for everyone else. -->
+<nav class="tab-bar" id="tabBar" style="display:none;"></nav>
 
 <!-- Player detail overlay (Stage 4) -->
 <div class="player-overlay" id="playerOverlay">
@@ -569,8 +609,6 @@
 
       const config = await apiGet('data/config.json');
       state.config = config || { season: 'unknown', names: [] };
-      el('seasonLabel').textContent = `${state.config.club || 'Sunderland AFC'} · ${state.config.season} season`;
-
       el('setupStatus').textContent = 'Connected to backend and repo successfully.';
       el('setupStatus').className = 'status ok';
       el('setupCard').style.display = 'none'; // hide once healthy, keeps the app clean day-to-day
@@ -603,14 +641,174 @@
   function showSignedIn() {
     el('pickerCard').style.display = 'none';
     el('signedInArea').style.display = 'block';
+    el('topBar').style.display = 'flex';
     el('currentName').textContent = state.name;
     loadComments();
     loadSquad();
     loadFixtures();
     loadMatchStats();
-    if (state.config && state.name === state.config.owner) {
-      el('ownerToolsCard').style.display = 'block';
+
+    const isOwner = state.config && state.name === state.config.owner;
+    el('tab-admin').innerHTML = ''; // clear any previous session's admin markup first
+    if (isOwner) renderAdminTab();
+    renderTabBar(isOwner);
+    switchTab('home');
+  }
+
+  // Small monoline icons (Feather-style, generic UI glyphs — not any club's
+  // branded imagery) for the bottom tab bar.
+  const TAB_ICONS = {
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    squad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    fixtures: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+    admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+  };
+  const TABS = [
+    { id: 'home', label: 'Home' },
+    { id: 'squad', label: 'Squad' },
+    { id: 'fixtures', label: 'Fixtures' },
+    { id: 'stats', label: 'Stats' },
+  ];
+  const ADMIN_TAB_ENTRY = { id: 'admin', label: 'Admin' };
+
+  // Admin only ever appears in this array — and therefore in the tab bar's
+  // markup — when isOwner is true, so non-owners have no button leading
+  // anywhere near owner tools, not just a hidden one.
+  function renderTabBar(isOwner) {
+    const tabs = isOwner ? [...TABS, ADMIN_TAB_ENTRY] : TABS;
+    el('tabBar').innerHTML = tabs.map(t => `
+      <button class="tab-bar-btn" data-tab="${t.id}" onclick="switchTab('${t.id}')">
+        <span class="tab-bar-icon">${TAB_ICONS[t.id]}</span>
+        <span>${t.label}</span>
+      </button>
+    `).join('');
+    el('tabBar').style.display = 'flex';
+  }
+
+  const ALL_TAB_IDS = ['home', 'squad', 'fixtures', 'stats', 'admin'];
+
+  window.switchTab = (tabId) => {
+    ALL_TAB_IDS.forEach(id => {
+      const panel = el('tab-' + id);
+      if (panel) panel.style.display = (id === tabId) ? 'block' : 'none';
+    });
+    el('tabBar').querySelectorAll('.tab-bar-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    window.scrollTo(0, 0);
+    if (tabId === 'stats') renderStatsTab();
+  };
+
+  // A generic shield — deliberately NOT the real club crest (trademarked;
+  // not something to source or reproduce here). If the owner adds a real
+  // crest.png to the frontend repo themselves, that's used instead.
+  window.makeGenericCrest = () => {
+    const div = document.createElement('div');
+    div.className = 'hero-crest-fallback';
+    div.innerHTML = '<svg viewBox="0 0 40 40" width="40" height="40"><path d="M20 3 L35 8 V19 C35 28 28 34 20 37 C12 34 5 28 5 19 V8 Z" fill="#ffffff" fill-opacity="0.25"/><path d="M20 3 L35 8 V19 C35 28 28 34 20 37 Z" fill="#ffffff" fill-opacity="0.12"/></svg>';
+    return div;
+  };
+
+  function crestMarkup() {
+    return `<img src="crest.png" alt="Club crest" class="hero-crest-img" onerror="this.replaceWith(makeGenericCrest())" />`;
+  }
+
+  // Home tab hero: next unplayed fixture by date, or the most recent result
+  // if nothing's upcoming (e.g. between the last match of a run and the
+  // next one being added).
+  function renderNextFixtureCard() {
+    const card = el('nextFixtureCard');
+    if (!card) return;
+    if (!state.fixtures.length) {
+      card.innerHTML = '<div class="card"><div class="empty">No fixtures yet</div></div>';
+      return;
     }
+    const now = new Date();
+    const upcoming = state.fixtures
+      .filter(f => f.status === 'NS' && new Date(f.date) >= now)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (upcoming.length) {
+      const next = upcoming[0];
+      const opponent = next.isHome ? next.awayTeam : next.homeTeam;
+      const venueTag = next.isHome ? 'H' : 'A';
+      card.innerHTML = `
+        <div class="hero-card">
+          ${crestMarkup()}
+          <div class="hero-label">Next match</div>
+          <div class="hero-teams">${venueTag} vs ${escapeHtml(opponent)}</div>
+          <div class="hero-meta">${formatFixtureDate(next.date)}${next.venue ? ' · ' + escapeHtml(next.venue) : ''}</div>
+        </div>
+      `;
+      return;
+    }
+
+    const played = state.fixtures
+      .filter(f => ['FT', 'AET', 'PEN'].includes(f.status))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (!played.length) {
+      card.innerHTML = '<div class="card"><div class="empty">No fixtures yet</div></div>';
+      return;
+    }
+    const last = played[0];
+    const opponent = last.isHome ? last.awayTeam : last.homeTeam;
+    const venueTag = last.isHome ? 'H' : 'A';
+    card.innerHTML = `
+      <div class="hero-card">
+        ${crestMarkup()}
+        <div class="hero-label">Last result</div>
+        <div class="hero-teams">${venueTag} vs ${escapeHtml(opponent)}</div>
+        <div class="hero-meta">${last.homeScore}-${last.awayScore} · ${formatFixtureDate(last.date).split(',')[0]}</div>
+      </div>
+    `;
+  }
+
+  // Stats tab: ranked by average match rating for now — the simplest fair
+  // read on a small dataset. Worth revisiting once a full season of real
+  // results makes a more considered "player of the season" formula (weighting
+  // goals/assists/appearances) meaningful rather than arbitrary.
+  function renderStatsTab() {
+    const container = el('statsTable');
+    const status = el('statsStatus');
+    if (!container || !status) return;
+
+    const rows = state.players
+      .filter(p => p.status !== 'left')
+      .map(p => ({ player: p, stats: computeSeasonStats(p) }))
+      .filter(r => r.stats.appearances > 0);
+
+    if (!rows.length) {
+      status.textContent = 'No match stats recorded yet this season.';
+      status.className = 'status';
+      container.innerHTML = '';
+      return;
+    }
+
+    status.textContent = 'Ranked by average match rating (minimum 1 appearance). Tap a player for the full breakdown.';
+    status.className = 'status';
+    rows.sort((a, b) => (b.stats.avgRating ?? 0) - (a.stats.avgRating ?? 0));
+
+    container.innerHTML = `
+      <div class="stats-table-header">
+        <span></span>
+        <span>Player</span>
+        <span class="st-col">Apps</span>
+        <span class="st-col">G</span>
+        <span class="st-col">A</span>
+        <span class="st-col">Avg</span>
+      </div>
+      ${rows.map((r, i) => `
+        <div class="stats-table-row" onclick="openPlayerDetail('${r.player.id}')">
+          <span class="st-rank">${i + 1}</span>
+          <span>${escapeHtml(r.player.name)}</span>
+          <span class="st-col">${r.stats.appearances}</span>
+          <span class="st-col">${r.stats.goals}</span>
+          <span class="st-col">${r.stats.assists}</span>
+          <span class="st-col st-avg">${r.stats.avgRating !== null ? r.stats.avgRating.toFixed(1) : '—'}</span>
+        </div>
+      `).join('')}
+    `;
   }
 
   const POSITION_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
@@ -863,6 +1061,7 @@
     try {
       state.fixtures = await apiGet('data/fixtures.json') || [];
       renderFixturesList();
+      renderNextFixtureCard();
     } catch (err) {
       el('fixturesList').innerHTML = `<div class="empty">Couldn't load fixtures (${err.message})</div>`;
     }
@@ -908,6 +1107,45 @@
     }
   }
 
+  // The owner-tools markup itself — kept as a JS template rather than static
+  // HTML so it's only ever inserted into the page for the signed-in owner.
+  // For every other name, #tab-admin stays a genuinely empty element; there
+  // is nothing in the page's actual HTML for a curious family member to find.
+  const ADMIN_TAB_HTML = `
+    <div class="card" id="ownerToolsCard">
+      <p class="eyebrow">Owner tools</p>
+      <input type="password" id="ownerPin" placeholder="Owner PIN" style="width:100%;padding:12px;border:1.5px solid var(--line);border-radius:10px;font-size:15px;margin-bottom:10px;" />
+
+      <button class="primary" id="findTeamBtn" style="background:var(--ink);">Find Sunderland's team ID</button>
+      <div id="findTeamResults" style="margin-top:10px;"></div>
+
+      <button class="primary" id="syncSquadBtn" style="margin-top:14px;background:var(--ink);">Sync squad from API-Football</button>
+      <div id="syncStatus" class="status"></div>
+
+      <button class="primary" id="manageSquadBtn" style="margin-top:14px;">Manage squad</button>
+      <div id="manageSquadArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageStatus" class="status"></div>
+
+      <button class="primary" id="manageFixturesBtn" style="margin-top:14px;">Manage fixtures</button>
+      <div id="manageFixturesArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageFixturesStatus" class="status"></div>
+
+      <button class="primary" id="manageMatchStatsBtn" style="margin-top:14px;">Manage match stats</button>
+      <div id="manageMatchStatsArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageMatchStatsStatus" class="status"></div>
+    </div>
+  `;
+
+  function renderAdminTab() {
+    el('tab-admin').innerHTML = ADMIN_TAB_HTML;
+    wireAdminHandlers();
+  }
+
+  // Everything below builds the owner-tools screen. It's only ever invoked
+  // (see renderAdminTab) after the admin markup has been injected for the
+  // owner — for anyone else, none of this runs and none of these element
+  // ids exist anywhere in the page.
+  function wireAdminHandlers() {
   el('manageSquadBtn').onclick = () => {
     const area = el('manageSquadArea');
     const isOpen = area.style.display === 'block';
@@ -1483,6 +1721,7 @@
       el('syncSquadBtn').disabled = false;
     }
   };
+  } // end wireAdminHandlers
 
   el('switchLink').onclick = (e) => {
     e.preventDefault();
