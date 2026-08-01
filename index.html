@@ -304,6 +304,25 @@
   }
   .bio-text { font-size: 14px; line-height: 1.55; white-space: pre-line; }
 
+  .match-history-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .match-history-row:last-child { border-bottom: none; }
+  .mh-opponent { font-weight: 600; font-size: 14px; }
+  .mh-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .mh-extras { font-size: 12px; margin-top: 2px; }
+  .mh-rating {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 18px;
+    flex-shrink: 0;
+    padding-left: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .edit-row {
     display: grid;
     grid-template-columns: 1fr;
@@ -700,6 +719,55 @@
     return `<div class="stat-cell"><div class="val">${display}</div><div class="lbl">${label}</div></div>`;
   }
 
+  // Match-by-match ratings — average rating alone can hide a run of poor
+  // matches offset by one standout one, so this surfaces the actual spread.
+  // Chronological (oldest first), each row tied back to its fixture for the
+  // opponent/scoreline, since match-stats records don't duplicate that data.
+  function buildMatchHistoryRows(player) {
+    const records = state.matchStats.filter(r => r.playerId === player.id);
+    const withFixture = records
+      .map(r => ({ r, fixture: state.fixtures.find(f => f.id === r.matchId) }))
+      .filter(x => x.fixture);
+    withFixture.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+
+    if (!withFixture.length) {
+      return '<div class="empty">No matches recorded yet.</div>';
+    }
+
+    return withFixture.map(({ r, fixture }) => {
+      const opponent = fixture.isHome ? fixture.awayTeam : fixture.homeTeam;
+      const venueTag = fixture.isHome ? 'H' : 'A';
+      const scoreOrDate = ['FT', 'AET', 'PEN'].includes(fixture.status)
+        ? `${fixture.homeScore}-${fixture.awayScore}`
+        : formatFixtureDate(fixture.date).split(',')[0];
+
+      const involvementLabel = r.appearance === 'start'
+        ? 'Started'
+        : r.appearance === 'sub'
+          ? `Sub (on ${r.subOnMinute ?? '?'}')`
+          : 'Unused sub';
+
+      const extras = [];
+      if (r.goals) extras.push(`${r.goals} ⚽`);
+      if (r.assists) extras.push(`${r.assists} 🅰️`);
+      if (r.yellowCards) extras.push('🟨'.repeat(r.yellowCards));
+      if (r.redCards) extras.push('🟥');
+
+      const ratingDisplay = (r.rating !== null && r.rating !== undefined) ? r.rating.toFixed(1) : '—';
+
+      return `
+        <div class="match-history-row">
+          <div>
+            <div class="mh-opponent">${venueTag} vs ${escapeHtml(opponent)}</div>
+            <div class="mh-meta">${scoreOrDate} · ${involvementLabel}${r.minutes ? ' · ' + r.minutes + "'" : ''}</div>
+            ${extras.length ? `<div class="mh-extras">${extras.join(' ')}</div>` : ''}
+          </div>
+          <div class="mh-rating">${ratingDisplay}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
   window.openPlayerDetail = (playerId) => {
     const player = state.players.find(p => p.id === playerId);
     if (!player) return;
@@ -753,12 +821,29 @@
       </div>
 
       <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <p class="eyebrow" style="margin:0;">Match-by-match ratings</p>
+          <a href="#" id="toggleMatchHistoryLink" style="font-size:13px;color:var(--safc-red);font-weight:600;text-decoration:none;">Show</a>
+        </div>
+        <div id="playerMatchHistoryList" style="display:none;margin-top:8px;">${buildMatchHistoryRows(player)}</div>
+      </div>
+
+      <div class="card">
         <p class="eyebrow">Biography</p>
         ${bio}
       </div>
     `;
 
     el('playerOverlay').classList.add('open');
+
+    const toggleLink = el('toggleMatchHistoryLink');
+    toggleLink.onclick = (e) => {
+      e.preventDefault();
+      const list = el('playerMatchHistoryList');
+      const isOpen = list.style.display === 'block';
+      list.style.display = isOpen ? 'none' : 'block';
+      toggleLink.textContent = isOpen ? 'Show' : 'Hide';
+    };
   };
 
   window.closePlayerDetail = () => {
