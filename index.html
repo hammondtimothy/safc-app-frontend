@@ -320,6 +320,10 @@
       <button class="primary" id="manageFixturesBtn" style="margin-top:14px;">Manage fixtures</button>
       <div id="manageFixturesArea" style="margin-top:12px;display:none;"></div>
       <div id="manageFixturesStatus" class="status"></div>
+
+      <button class="primary" id="manageMatchStatsBtn" style="margin-top:14px;">Manage match stats</button>
+      <div id="manageMatchStatsArea" style="margin-top:12px;display:none;"></div>
+      <div id="manageMatchStatsStatus" class="status"></div>
     </div>
   </div>
 
@@ -327,7 +331,7 @@
 
 <script src="config.js"></script>
 <script>
-  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [], fixtures: [] };
+  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [], fixtures: [], matchStats: [] };
 
   const COUNTRIES = [
     ["England","GB-ENG"],["Scotland","GB-SCT"],["Wales","GB-WLS"],["Northern Ireland","GB-NIR"],
@@ -461,6 +465,7 @@
     loadComments();
     loadSquad();
     loadFixtures();
+    loadMatchStats();
     if (state.config && state.name === state.config.owner) {
       el('ownerToolsCard').style.display = 'block';
     }
@@ -544,6 +549,15 @@
         </div>
       `;
     }).join('');
+  }
+
+  async function loadMatchStats() {
+    try {
+      state.matchStats = await apiGet('data/match-stats.json') || [];
+    } catch (err) {
+      // Not fatal — file may not exist yet (no matches logged so far).
+      state.matchStats = [];
+    }
   }
 
   el('manageSquadBtn').onclick = () => {
@@ -780,6 +794,204 @@
     } catch (err) {
       el('manageFixturesStatus').textContent = `Failed: ${err.message}`;
       el('manageFixturesStatus').className = 'status err';
+    }
+  };
+
+  el('manageMatchStatsBtn').onclick = () => {
+    const area = el('manageMatchStatsArea');
+    const isOpen = area.style.display === 'block';
+    area.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) renderManageMatchStats();
+  };
+
+  const APPEARANCE_OPTIONS = [
+    ['none', 'Did not feature'],
+    ['start', 'Started'],
+    ['sub', 'Sub appearance'],
+    ['unused', 'Unused sub'],
+  ];
+
+  // Which fixture's stats are currently being edited — kept outside state
+  // since it's pure UI selection, not app data to persist.
+  let matchStatsSelectedFixture = null;
+
+  function renderManageMatchStats() {
+    const area = el('manageMatchStatsArea');
+    const sortedFixtures = state.fixtures.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (!sortedFixtures.length) {
+      area.innerHTML = '<div class="empty">Add fixtures first, then come back here.</div>';
+      return;
+    }
+    if (!matchStatsSelectedFixture || !sortedFixtures.some(f => f.id === matchStatsSelectedFixture)) {
+      matchStatsSelectedFixture = sortedFixtures[0].id;
+    }
+
+    const fixtureOptions = sortedFixtures.map(f => {
+      const opponent = f.isHome ? f.awayTeam : f.homeTeam;
+      const venueTag = f.isHome ? 'H' : 'A';
+      const scoreTag = ['FT', 'AET', 'PEN'].includes(f.status) ? ` (${f.homeScore}-${f.awayScore})` : '';
+      const label = `${formatFixtureDate(f.date).split(',')[0]} · ${venueTag} vs ${opponent}${scoreTag}`;
+      return `<option value="${f.id}" ${f.id === matchStatsSelectedFixture ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+
+    area.innerHTML = `
+      <select id="msFixtureSelect" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;">
+        ${fixtureOptions}
+      </select>
+
+      <p class="eyebrow" style="margin-top:16px;">Quick-fill from pasted JSON</p>
+      <div class="empty" style="text-align:left;padding:0 0 8px;">Paste a stats block (e.g. one Claude has read off a FotMob/WhoScored report) to fill the rows below automatically. Matches by playerId, or by player name if no id is given.</div>
+      <textarea id="msJsonPaste" placeholder='[{"name":"Player Name","appearance":"start","minutes":90,"goals":1,"assists":0,"yellowCards":0,"redCards":0,"rating":7.4}]' style="min-height:90px;font-family:monospace;font-size:12px;"></textarea>
+      <button class="primary" style="background:var(--ink);margin-top:8px;" onclick="fillMatchStatsFromJson()">Fill table from JSON</button>
+      <div id="msJsonStatus" class="status"></div>
+
+      <p class="eyebrow" style="margin-top:16px;">Squad — review &amp; edit</p>
+      <div id="msPlayerRows"></div>
+
+      <button class="primary" style="margin-top:10px;" onclick="saveMatchStats()">Save match stats</button>
+    `;
+
+    el('msFixtureSelect').onchange = (e) => {
+      matchStatsSelectedFixture = e.target.value;
+      renderMatchStatsPlayerRows();
+    };
+
+    renderMatchStatsPlayerRows();
+  }
+
+  function renderMatchStatsPlayerRows() {
+    const matchId = matchStatsSelectedFixture;
+    const container = el('msPlayerRows');
+    if (!matchId) { container.innerHTML = ''; return; }
+
+    const eligible = state.players
+      .filter(p => p.status !== 'left')
+      .sort((a, b) => (a.squadNumber ?? 999) - (b.squadNumber ?? 999));
+    const existingByPlayer = new Map(
+      state.matchStats.filter(r => r.matchId === matchId).map(r => [r.playerId, r])
+    );
+
+    container.innerHTML = eligible.map(p => {
+      const r = existingByPlayer.get(p.id) || {};
+      const appearance = r.appearance || 'none';
+      return `
+        <div class="edit-row" data-player-id="${p.id}" data-player-name="${escapeHtml(p.name)}">
+          <div style="font-weight:600;font-size:13px;">${p.squadNumber ?? '—'} · ${escapeHtml(p.name)}</div>
+          <div class="edit-row-fields">
+            <select class="ms-appearance">
+              ${APPEARANCE_OPTIONS.map(([v, l]) => `<option value="${v}" ${appearance === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <input type="number" class="ms-minutes" value="${r.minutes ?? ''}" placeholder="Mins" min="0" max="120" />
+            <input type="number" class="ms-rating" value="${r.rating ?? ''}" placeholder="Rating" step="0.1" min="0" max="10" />
+          </div>
+          <div class="edit-row-fields">
+            <input type="number" class="ms-goals" value="${r.goals ?? 0}" placeholder="Goals" min="0" />
+            <input type="number" class="ms-assists" value="${r.assists ?? 0}" placeholder="Assists" min="0" />
+            <input type="number" class="ms-yellow" value="${r.yellowCards ?? 0}" placeholder="Yellow" min="0" max="2" />
+            <input type="number" class="ms-red" value="${r.redCards ?? 0}" placeholder="Red" min="0" max="1" />
+          </div>
+          <div class="edit-row-fields">
+            <input type="number" class="ms-sub-on" value="${r.subOnMinute ?? ''}" placeholder="Sub on min" min="0" max="120" />
+            <input type="number" class="ms-sub-off" value="${r.subOffMinute ?? ''}" placeholder="Sub off min" min="0" max="120" />
+          </div>
+          <input type="text" class="ms-notes" value="${escapeHtml(r.notes || '')}" placeholder="Notes (optional)" />
+        </div>
+      `;
+    }).join('');
+  }
+
+  window.fillMatchStatsFromJson = () => {
+    const raw = el('msJsonPaste').value.trim();
+    if (!raw) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array');
+    } catch (err) {
+      el('msJsonStatus').textContent = `Invalid JSON: ${err.message}`;
+      el('msJsonStatus').className = 'status err';
+      return;
+    }
+
+    let matched = 0;
+    const unmatched = [];
+    parsed.forEach(rec => {
+      let row = null;
+      if (rec.playerId) {
+        row = el('msPlayerRows').querySelector(`.edit-row[data-player-id="${rec.playerId}"]`);
+      }
+      if (!row && rec.name) {
+        const target = String(rec.name).toLowerCase();
+        row = Array.from(el('msPlayerRows').querySelectorAll('.edit-row'))
+          .find(r => r.dataset.playerName.toLowerCase() === target);
+      }
+      if (!row) { unmatched.push(rec.playerId || rec.name || '?'); return; }
+
+      row.querySelector('.ms-appearance').value = rec.appearance || 'start';
+      row.querySelector('.ms-minutes').value = rec.minutes ?? '';
+      row.querySelector('.ms-rating').value = rec.rating ?? '';
+      row.querySelector('.ms-goals').value = rec.goals ?? 0;
+      row.querySelector('.ms-assists').value = rec.assists ?? 0;
+      row.querySelector('.ms-yellow').value = rec.yellowCards ?? 0;
+      row.querySelector('.ms-red').value = rec.redCards ?? 0;
+      row.querySelector('.ms-sub-on').value = rec.subOnMinute ?? '';
+      row.querySelector('.ms-sub-off').value = rec.subOffMinute ?? '';
+      row.querySelector('.ms-notes').value = rec.notes || '';
+      matched++;
+    });
+
+    el('msJsonStatus').textContent = unmatched.length
+      ? `Filled ${matched} row(s). Couldn't match: ${unmatched.join(', ')}`
+      : `Filled ${matched} row(s) from JSON. Review below, then Save.`;
+    el('msJsonStatus').className = unmatched.length ? 'status err' : 'status ok';
+  };
+
+  window.saveMatchStats = async () => {
+    const matchId = matchStatsSelectedFixture;
+    if (!matchId) return;
+    const rows = el('msPlayerRows').querySelectorAll('.edit-row');
+    const records = [];
+    rows.forEach(row => {
+      const appearance = row.querySelector('.ms-appearance').value;
+      if (appearance === 'none') return; // not involved in this match — nothing to save
+      const minutesVal = row.querySelector('.ms-minutes').value;
+      const ratingVal = row.querySelector('.ms-rating').value;
+      const subOnVal = row.querySelector('.ms-sub-on').value;
+      const subOffVal = row.querySelector('.ms-sub-off').value;
+      records.push({
+        playerId: row.dataset.playerId,
+        appearance,
+        minutes: minutesVal === '' ? 0 : Number(minutesVal),
+        goals: Number(row.querySelector('.ms-goals').value || 0),
+        assists: Number(row.querySelector('.ms-assists').value || 0),
+        yellowCards: Number(row.querySelector('.ms-yellow').value || 0),
+        redCards: Number(row.querySelector('.ms-red').value || 0),
+        rating: ratingVal === '' ? null : Number(ratingVal),
+        subOnMinute: subOnVal === '' ? null : Number(subOnVal),
+        subOffMinute: subOffVal === '' ? null : Number(subOffVal),
+        notes: row.querySelector('.ms-notes').value.trim() || null,
+      });
+    });
+
+    const pin = el('ownerPin').value;
+    el('manageMatchStatsStatus').textContent = 'Saving…';
+    el('manageMatchStatsStatus').className = 'status';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/owner/save-match-stats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Owner-Pin': pin },
+        body: JSON.stringify({ matchId, records }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      state.matchStats = state.matchStats
+        .filter(r => r.matchId !== matchId)
+        .concat(records.map(r => ({ id: `ms_${matchId}_${r.playerId}`, matchId, ...r })));
+      el('manageMatchStatsStatus').textContent = `Saved — ${records.length} player record(s) for this match.`;
+      el('manageMatchStatsStatus').className = 'status ok';
+    } catch (err) {
+      el('manageMatchStatsStatus').textContent = `Failed: ${err.message}`;
+      el('manageMatchStatsStatus').className = 'status err';
     }
   };
 
