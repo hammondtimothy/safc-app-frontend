@@ -163,6 +163,16 @@
   .status.ok { color: #157F3B; }
   .status.err { color: var(--safc-red); }
 
+  .status-group { margin-bottom: 20px; }
+  .status-group:last-child { margin-bottom: 0; }
+  .status-group-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--safc-red);
+    margin: 0 0 10px;
+  }
   .position-group { margin-bottom: 14px; }
   .position-group:last-child { margin-bottom: 0; }
   .position-group h4 {
@@ -179,7 +189,9 @@
     padding: 8px 0;
     border-bottom: 1px solid var(--line);
     font-size: 14px;
+    cursor: pointer;
   }
+  .player-row:active { background: var(--paper); }
   .player-row:last-child { border-bottom: none; }
   .player-row .num {
     color: var(--muted);
@@ -200,6 +212,97 @@
   .badge.loan { background: #FFF4E0; color: #A8630A; }
   .badge.academy { background: #E9EEFB; color: #2C4FA6; }
   .badge.left { background: #F1EFEB; color: var(--muted); }
+
+  /* Player detail overlay */
+  .player-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--paper);
+    z-index: 100;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+  }
+  .player-overlay.open { transform: translateX(0); }
+  .player-overlay-header {
+    background: var(--safc-red);
+    color: white;
+    padding: calc(env(safe-area-inset-top) + 16px) 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .player-overlay-back {
+    background: rgba(255,255,255,0.18);
+    border: none;
+    color: white;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .player-overlay-header h2 {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 18px;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .player-overlay-header p {
+    margin: 2px 0 0;
+    font-size: 13px;
+    opacity: 0.85;
+  }
+  .player-overlay-body { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
+
+  .player-photo-block { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .player-photo, .player-photo-fallback {
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid var(--line);
+  }
+  .player-photo-fallback {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--safc-red);
+    color: white;
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 20px;
+  }
+  .player-meta-line { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .stat-cell {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .stat-cell .val {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 20px;
+    color: var(--ink);
+  }
+  .stat-cell .lbl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .bio-text { font-size: 14px; line-height: 1.55; white-space: pre-line; }
 
   .edit-row {
     display: grid;
@@ -336,6 +439,18 @@
   </div>
 
 </main>
+
+<!-- Player detail overlay (Stage 4) -->
+<div class="player-overlay" id="playerOverlay">
+  <div class="player-overlay-header">
+    <button class="player-overlay-back" id="playerOverlayBack" aria-label="Back">&larr;</button>
+    <div>
+      <h2 id="playerOverlayName">&nbsp;</h2>
+      <p id="playerOverlaySub">&nbsp;</p>
+    </div>
+  </div>
+  <div class="player-overlay-body" id="playerOverlayBody"></div>
+</div>
 
 <script src="config.js"></script>
 <script>
@@ -481,6 +596,15 @@
 
   const POSITION_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
   const POSITION_LABELS = { GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', FWD: 'Forwards' };
+  // Squad first (most likely to feature), then loan/academy (rarely feature but
+  // still worth having to hand), left last — avoids scrolling past fringe
+  // players to find who's actually going to play week to week.
+  const STATUS_GROUPS = [
+    ['squad', 'First-team squad'],
+    ['loan', 'On loan'],
+    ['academy', 'Academy'],
+    ['left', 'Departed'],
+  ];
 
   async function loadSquad() {
     try {
@@ -497,21 +621,152 @@
       container.innerHTML = '<div class="empty">No players yet</div>';
       return;
     }
-    container.innerHTML = POSITION_ORDER.map(pos => {
-      const players = state.players
-        .filter(p => p.position === pos)
-        .sort((a, b) => (a.squadNumber ?? 999) - (b.squadNumber ?? 999));
-      if (!players.length) return '';
-      const rows = players.map(p => `
-        <div class="player-row">
-          <span class="num">${p.squadNumber ?? '—'}</span>
-          <span class="name">${flagEmoji(p.nationality)} ${escapeHtml(p.name)}${p.note ? ` <span style="color:var(--muted);font-size:12px;">— ${escapeHtml(p.note)}</span>` : ''}</span>
-          <span class="badge ${p.status}">${p.status}</span>
-        </div>
-      `).join('');
-      return `<div class="position-group"><h4>${POSITION_LABELS[pos]}</h4>${rows}</div>`;
+    container.innerHTML = STATUS_GROUPS.map(([status, statusLabel]) => {
+      const inStatus = state.players.filter(p => (p.status || 'squad') === status);
+      if (!inStatus.length) return '';
+      const positionBlocks = POSITION_ORDER.map(pos => {
+        const players = inStatus
+          .filter(p => p.position === pos)
+          .sort((a, b) => (a.squadNumber ?? 999) - (b.squadNumber ?? 999));
+        if (!players.length) return '';
+        const rows = players.map(p => `
+          <div class="player-row" onclick="openPlayerDetail('${p.id}')">
+            <span class="num">${p.squadNumber ?? '—'}</span>
+            <span class="name">${flagEmoji(p.nationality)} ${escapeHtml(p.name)}${p.note ? ` <span style="color:var(--muted);font-size:12px;">— ${escapeHtml(p.note)}</span>` : ''}</span>
+            <span class="badge ${p.status}">${p.status}</span>
+          </div>
+        `).join('');
+        return `<div class="position-group"><h4>${POSITION_LABELS[pos]}</h4>${rows}</div>`;
+      }).join('');
+      return `<div class="status-group"><p class="status-group-header">${escapeHtml(statusLabel)}</p>${positionBlocks}</div>`;
     }).join('');
   }
+
+  // ---- Player detail overlay (Stage 4) ----
+
+  // Player initials for the photo fallback badge, e.g. "A. Patterson" -> "AP".
+  function playerInitials(name) {
+    if (!name) return '?';
+    const parts = name.replace(/\./g, '').split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  // Season stats are never stored — always recomputed from data/match-stats.json
+  // plus data/fixtures.json, so corrections to either source are reflected
+  // immediately without any separate "recalculate" step.
+  function computeSeasonStats(player) {
+    const records = state.matchStats.filter(r => r.playerId === player.id);
+    const appeared = records.filter(r => r.appearance === 'start' || r.appearance === 'sub');
+
+    const sum = (key) => appeared.reduce((total, r) => total + (r[key] || 0), 0);
+    const ratings = appeared.map(r => r.rating).filter(r => r !== null && r !== undefined);
+    const avgRating = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
+
+    const stats = {
+      appearances: appeared.length,
+      starts: records.filter(r => r.appearance === 'start').length,
+      subApps: records.filter(r => r.appearance === 'sub').length,
+      minutes: sum('minutes'),
+      goals: sum('goals'),
+      assists: sum('assists'),
+      yellowCards: sum('yellowCards'),
+      redCards: sum('redCards'),
+      avgRating,
+      cleanSheets: null,
+      goalsConceded: null,
+    };
+
+    if (player.position === 'GK' || player.position === 'DEF') {
+      let cleanSheets = 0;
+      let goalsConceded = 0;
+      appeared.forEach(r => {
+        const fixture = state.fixtures.find(f => f.id === r.matchId);
+        if (!fixture || !['FT', 'AET', 'PEN'].includes(fixture.status)) return;
+        const conceded = fixture.isHome ? fixture.awayScore : fixture.homeScore;
+        if (conceded === null || conceded === undefined) return;
+        goalsConceded += conceded;
+        if (conceded === 0) cleanSheets++;
+      });
+      stats.cleanSheets = cleanSheets;
+      stats.goalsConceded = goalsConceded;
+    }
+
+    return stats;
+  }
+
+  function statCell(value, label) {
+    const display = (value === null || value === undefined) ? '—' : value;
+    return `<div class="stat-cell"><div class="val">${display}</div><div class="lbl">${label}</div></div>`;
+  }
+
+  window.openPlayerDetail = (playerId) => {
+    const player = state.players.find(p => p.id === playerId);
+    if (!player) return;
+    const stats = computeSeasonStats(player);
+
+    el('playerOverlayName').textContent = player.name;
+    el('playerOverlaySub').textContent = `${player.squadNumber ? '#' + player.squadNumber + ' · ' : ''}${POSITION_LABELS[player.position] || player.position}`;
+
+    const photoBlock = player.photo
+      ? `<img class="player-photo" src="${player.photo}" alt="${escapeHtml(player.name)}" onerror="this.outerHTML='<div class=&quot;player-photo-fallback&quot;>${playerInitials(player.name)}</div>'" />`
+      : `<div class="player-photo-fallback">${playerInitials(player.name)}</div>`;
+
+    const ratingDisplay = stats.avgRating !== null ? stats.avgRating.toFixed(1) : '—';
+
+    const statCells = [
+      statCell(stats.appearances, 'Apps'),
+      statCell(stats.starts, 'Starts'),
+      statCell(stats.subApps, 'Sub apps'),
+      statCell(stats.minutes, 'Minutes'),
+      statCell(stats.goals, 'Goals'),
+      statCell(stats.assists, 'Assists'),
+      statCell(stats.yellowCards, 'Yellow'),
+      statCell(stats.redCards, 'Red'),
+      statCell(ratingDisplay, 'Avg rating'),
+    ];
+    if (player.position === 'GK' || player.position === 'DEF') {
+      statCells.push(statCell(stats.cleanSheets, 'Clean sheets'));
+      statCells.push(statCell(stats.goalsConceded, 'Conceded'));
+    }
+
+    const bio = player.biography && player.biography.trim()
+      ? `<div class="bio-text">${escapeHtml(player.biography)}</div>`
+      : `<div class="empty" style="text-align:left;padding:0;">No biography yet.</div>`;
+
+    el('playerOverlayBody').innerHTML = `
+      <div class="card">
+        <div class="player-photo-block">
+          ${photoBlock}
+          <div>
+            <div style="font-weight:700;font-size:16px;">${flagEmoji(player.nationality)} ${escapeHtml(player.name)}</div>
+            <div class="player-meta-line">${player.age ? player.age + ' years old' : 'Age unknown'}</div>
+            <span class="badge ${player.status}" style="margin-top:6px;display:inline-block;">${player.status}</span>
+          </div>
+        </div>
+        ${player.note ? `<div class="player-meta-line" style="margin-top:8px;">${escapeHtml(player.note)}</div>` : ''}
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">2026-27 season</p>
+        <div class="stat-grid">${statCells.join('')}</div>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">Biography</p>
+        ${bio}
+      </div>
+    `;
+
+    el('playerOverlay').classList.add('open');
+  };
+
+  window.closePlayerDetail = () => {
+    el('playerOverlay').classList.remove('open');
+  };
+
+  el('playerOverlayBack').onclick = closePlayerDetail;
+
 
   function formatFixtureDate(iso) {
     const d = new Date(iso);
