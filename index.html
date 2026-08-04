@@ -109,6 +109,28 @@
   .st-rank { color: var(--muted); font-variant-numeric: tabular-nums; }
   .st-col { text-align: center; font-variant-numeric: tabular-nums; }
   .st-avg { font-weight: 700; }
+
+  .league-table-header, .league-row {
+    display: grid;
+    grid-template-columns: 20px 1fr 24px 32px 32px;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 2px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  .league-table-header {
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--line);
+  }
+  .league-row:last-child { border-bottom: none; }
+  .league-row-safc { background: #FCE8EA; border-radius: 6px; font-weight: 700; }
+  .lg-pos { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .lg-col { text-align: center; font-variant-numeric: tabular-nums; }
+  .lg-pts { font-weight: 700; }
   main {
     max-width: 480px;
     margin: 0 auto;
@@ -455,6 +477,7 @@
 
     <section id="tab-home">
       <div id="nextFixtureCard"></div>
+      <div class="card" id="leagueTableCard"></div>
       <div class="card">
         <p class="eyebrow">Post a comment</p>
         <textarea id="commentText" placeholder="Say something about the Lads…"></textarea>
@@ -647,6 +670,7 @@
     loadSquad();
     loadFixtures();
     loadMatchStats();
+    loadLeagueTable();
 
     const isOwner = state.config && state.name === state.config.owner;
     el('tab-admin').innerHTML = ''; // clear any previous session's admin markup first
@@ -966,6 +990,47 @@
     }).join('');
   }
 
+  // Live table, not tied to Sunderland's own fixtures — updates whenever any
+  // Premier League match finishes, via football-data.org (proxied through
+  // the Worker so the API token stays out of the public frontend repo).
+  async function loadLeagueTable() {
+    const card = el('leagueTableCard');
+    if (!card) return;
+    card.innerHTML = '<p class="eyebrow" style="margin:0;">Premier League table</p><div class="empty">Loading table…</div>';
+    try {
+      const res = await fetch(`${WORKER_URL}/api/standings`);
+      const data = await res.json();
+      if (!res.ok || !data.table) throw new Error(data.error || 'Could not load table');
+      renderLeagueTable(data);
+    } catch (err) {
+      card.innerHTML = `<p class="eyebrow" style="margin:0;">Premier League table</p><div class="empty">Couldn't load the table (${err.message})</div>`;
+    }
+  }
+
+  function renderLeagueTable(data) {
+    const card = el('leagueTableCard');
+    const rows = data.table.map(r => `
+      <div class="league-row ${/sunderland/i.test(r.team) ? 'league-row-safc' : ''}">
+        <span class="lg-pos">${r.position}</span>
+        <span>${escapeHtml(r.team)}</span>
+        <span class="lg-col">${r.played}</span>
+        <span class="lg-col">${r.goalDifference > 0 ? '+' : ''}${r.goalDifference}</span>
+        <span class="lg-col lg-pts">${r.points}</span>
+      </div>
+    `).join('');
+    const updated = data.updated
+      ? new Date(data.updated).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    card.innerHTML = `
+      <p class="eyebrow" style="margin:0;">Premier League table</p>
+      <div class="league-table-header">
+        <span></span><span>Team</span><span class="lg-col">P</span><span class="lg-col">GD</span><span class="lg-col">Pts</span>
+      </div>
+      ${rows}
+      ${updated ? `<div class="player-meta-line" style="margin-top:8px;">Updated ${updated}</div>` : ''}
+    `;
+  }
+
   window.openPlayerDetail = (playerId) => {
     const player = state.players.find(p => p.id === playerId);
     if (!player) return;
@@ -1006,7 +1071,11 @@
           ${photoBlock}
           <div>
             <div style="font-weight:700;font-size:16px;">${flagEmoji(player.nationality)} ${escapeHtml(player.name)}</div>
-            <div class="player-meta-line">${player.age ? player.age + ' years old' : 'Age unknown'}</div>
+            <div class="player-meta-line">${[
+              player.age ? player.age + ' years old' : null,
+              player.height ? player.height + ' cm' : null,
+            ].filter(Boolean).join(' · ') || 'Age/height unknown'}</div>
+            ${player.transferValue ? `<div class="player-meta-line">Market value: ${escapeHtml(player.transferValue)}</div>` : ''}
             <span class="badge ${player.status}" style="margin-top:6px;display:inline-block;">${player.status}</span>
           </div>
         </div>
@@ -1158,23 +1227,58 @@
     area.innerHTML = state.players.map((p, i) => `
       <div class="edit-row" data-index="${i}">
         <div class="edit-row-fields">
-          <input type="number" class="f-number" value="${p.squadNumber ?? ''}" placeholder="#" />
-          <input type="text" class="f-name" value="${escapeHtml(p.name)}" placeholder="Name" />
+          <div class="field-group">
+            <label class="field-label">Number</label>
+            <input type="number" class="f-number" value="${p.squadNumber ?? ''}" placeholder="#" />
+          </div>
+          <div class="field-group" style="flex:2;">
+            <label class="field-label">Name</label>
+            <input type="text" class="f-name" value="${escapeHtml(p.name)}" placeholder="Name" />
+          </div>
         </div>
         <div class="edit-row-fields">
-          <select class="f-position">
-            ${POSITION_ORDER.map(pos => `<option value="${pos}" ${p.position === pos ? 'selected' : ''}>${pos}</option>`).join('')}
-          </select>
-          <select class="f-status">
-            ${['squad','loan','academy','left'].map(s => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+          <div class="field-group">
+            <label class="field-label">Position</label>
+            <select class="f-position">
+              ${POSITION_ORDER.map(pos => `<option value="${pos}" ${p.position === pos ? 'selected' : ''}>${pos}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Status</label>
+            <select class="f-status">
+              ${['squad','loan','academy','left'].map(s => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="edit-row-fields">
+          <div class="field-group">
+            <label class="field-label">Age</label>
+            <input type="number" class="f-age" value="${p.age ?? ''}" placeholder="—" min="14" max="45" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Height (cm)</label>
+            <input type="number" class="f-height" value="${p.height ?? ''}" placeholder="—" min="140" max="215" />
+          </div>
+          <div class="field-group" style="flex:2;">
+            <label class="field-label">Transfer value</label>
+            <input type="text" class="f-value" value="${escapeHtml(p.transferValue || '')}" placeholder="e.g. €8.00m" />
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Nationality</label>
+          <select class="f-nationality">
+            <option value="">— Nationality —</option>
+            ${COUNTRIES.map(([name, code]) => `<option value="${code}" ${p.nationality === code ? 'selected' : ''}>${flagText(code)} ${name}</option>`).join('')}
           </select>
         </div>
-        <select class="f-nationality">
-          <option value="">— Nationality —</option>
-          ${COUNTRIES.map(([name, code]) => `<option value="${code}" ${p.nationality === code ? 'selected' : ''}>${flagText(code)} ${name}</option>`).join('')}
-        </select>
-        <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="Note (e.g. on loan at...)" />
-        <textarea class="f-bio" placeholder="Short biography — paste from safc.com" style="min-height:60px;">${escapeHtml(p.biography || '')}</textarea>
+        <div class="field-group">
+          <label class="field-label">Note</label>
+          <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="e.g. on loan at..." />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Biography</label>
+          <textarea class="f-bio" placeholder="Short biography — paste from safc.com" style="min-height:60px;">${escapeHtml(p.biography || '')}</textarea>
+        </div>
         <a href="#" class="remove-player-link" onclick="removePlayerRow(${i});return false;">Remove player</a>
       </div>
     `).join('') + `
@@ -1190,6 +1294,8 @@
       squadNumber: null,
       position: 'MID',
       age: null,
+      height: null,
+      transferValue: null,
       photo: null,
       status: 'squad',
       note: '',
@@ -1210,10 +1316,15 @@
     rows.forEach(row => {
       const i = Number(row.dataset.index);
       const num = row.querySelector('.f-number').value;
+      const age = row.querySelector('.f-age').value;
+      const height = row.querySelector('.f-height').value;
       state.players[i].squadNumber = num === '' ? null : Number(num);
       state.players[i].name = row.querySelector('.f-name').value.trim();
       state.players[i].position = row.querySelector('.f-position').value;
       state.players[i].status = row.querySelector('.f-status').value;
+      state.players[i].age = age === '' ? null : Number(age);
+      state.players[i].height = height === '' ? null : Number(height);
+      state.players[i].transferValue = row.querySelector('.f-value').value.trim() || null;
       state.players[i].nationality = row.querySelector('.f-nationality').value || null;
       state.players[i].biography = row.querySelector('.f-bio').value.trim();
       state.players[i].note = row.querySelector('.f-note').value.trim() || null;
