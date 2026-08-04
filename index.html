@@ -1097,7 +1097,7 @@
             <span class="badge ${player.status}" style="margin-top:6px;display:inline-block;">${player.status}</span>
           </div>
         </div>
-        ${player.note ? `<div class="player-meta-line" style="margin-top:8px;">${escapeHtml(player.note)}</div>` : ''}
+        ${player.note ? `<div style="margin-top:8px;"><p class="eyebrow" style="margin:0 0 2px;">Lucas's Notes</p><div class="player-meta-line">${escapeHtml(player.note)}</div></div>` : ''}
       </div>
 
       <div class="card">
@@ -1290,8 +1290,8 @@
           </select>
         </div>
         <div class="field-group">
-          <label class="field-label">Note</label>
-          <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="e.g. on loan at..." />
+          <label class="field-label">Lucas's Notes</label>
+          <input type="text" class="f-note" value="${escapeHtml(p.note || '')}" placeholder="Lucas's one-line take on this player" />
         </div>
         <div class="field-group">
           <label class="field-label">Biography</label>
