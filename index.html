@@ -1009,6 +1009,23 @@
 
   function renderLeagueTable(data) {
     const card = el('leagueTableCard');
+
+    // football-data.org can return fully-populated "table" data for a season
+    // that hasn't started — the season *dates* were correct but the numbers
+    // were clearly synthetic (a newly-promoted Sunderland finishing 7th with
+    // 54 points, 38 games in, before a ball's been kicked). Rather than trust
+    // anything the API says about whether the season is "real", we check
+    // against today's actual date, which we know for certain.
+    const now = new Date();
+    const seasonStart = data.seasonStart ? new Date(data.seasonStart) : null;
+    if (seasonStart && now < seasonStart) {
+      card.innerHTML = `
+        <p class="eyebrow" style="margin:0;">Premier League table</p>
+        <div class="empty">Season kicks off ${formatFixtureDate(data.seasonStart).split(',')[0]} — the table will appear here once matches start being played.</div>
+      `;
+      return;
+    }
+
     const rows = data.table.map(r => `
       <div class="league-row ${/sunderland/i.test(r.team) ? 'league-row-safc' : ''}">
         <span class="lg-pos">${r.position}</span>
@@ -1019,19 +1036,6 @@
       </div>
     `).join('');
 
-    // football-data.org keeps last season's final table as "current" until
-    // the new season is actually live in their system — flag that clearly
-    // rather than let it silently look like an up-to-date table.
-    let seasonNote = '';
-    if (data.seasonStart) {
-      const startYear = new Date(data.seasonStart).getFullYear();
-      const seasonLabel = `${startYear}-${String(startYear + 1).slice(2)}`;
-      const configSeason = state.config && state.config.season;
-      if (configSeason && seasonLabel !== configSeason) {
-        seasonNote = `<div class="status err" style="margin-top:8px;">Showing the final ${seasonLabel} table — the ${configSeason} season hasn't started yet on football-data.org. This will switch over automatically once it does.</div>`;
-      }
-    }
-
     const updated = data.updated
       ? new Date(data.updated).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : '';
@@ -1041,7 +1045,6 @@
         <span></span><span>Team</span><span class="lg-col">P</span><span class="lg-col">GD</span><span class="lg-col">Pts</span>
       </div>
       ${rows}
-      ${seasonNote}
       ${updated ? `<div class="player-meta-line" style="margin-top:8px;">Updated ${updated}</div>` : ''}
     `;
   }
