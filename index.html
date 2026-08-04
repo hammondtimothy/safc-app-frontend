@@ -1018,6 +1018,20 @@
         <span class="lg-col lg-pts">${r.points}</span>
       </div>
     `).join('');
+
+    // football-data.org keeps last season's final table as "current" until
+    // the new season is actually live in their system — flag that clearly
+    // rather than let it silently look like an up-to-date table.
+    let seasonNote = '';
+    if (data.seasonStart) {
+      const startYear = new Date(data.seasonStart).getFullYear();
+      const seasonLabel = `${startYear}-${String(startYear + 1).slice(2)}`;
+      const configSeason = state.config && state.config.season;
+      if (configSeason && seasonLabel !== configSeason) {
+        seasonNote = `<div class="status err" style="margin-top:8px;">Showing the final ${seasonLabel} table — the ${configSeason} season hasn't started yet on football-data.org. This will switch over automatically once it does.</div>`;
+      }
+    }
+
     const updated = data.updated
       ? new Date(data.updated).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : '';
@@ -1027,6 +1041,7 @@
         <span></span><span>Team</span><span class="lg-col">P</span><span class="lg-col">GD</span><span class="lg-col">Pts</span>
       </div>
       ${rows}
+      ${seasonNote}
       ${updated ? `<div class="player-meta-line" style="margin-top:8px;">Updated ${updated}</div>` : ''}
     `;
   }
