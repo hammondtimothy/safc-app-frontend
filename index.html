@@ -1305,7 +1305,36 @@
     `;
   }
 
+  // Reads whatever's currently in the form's input boxes back into
+  // state.players, WITHOUT writing to the server. Anything typed but not yet
+  // saved only exists in these DOM inputs — any action that calls
+  // renderManageSquad() (adding or removing a row) wipes and rebuilds the
+  // form from state.players, so this must run first or in-progress edits on
+  // every other row get silently discarded. This was exactly the bug: Remove
+  // used to skip this step entirely.
+  function syncSquadFormToState() {
+    const rows = el('manageSquadArea').querySelectorAll('.edit-row');
+    rows.forEach(row => {
+      const i = Number(row.dataset.index);
+      if (!state.players[i]) return;
+      const num = row.querySelector('.f-number').value;
+      const age = row.querySelector('.f-age').value;
+      const height = row.querySelector('.f-height').value;
+      state.players[i].squadNumber = num === '' ? null : Number(num);
+      state.players[i].name = row.querySelector('.f-name').value;
+      state.players[i].position = row.querySelector('.f-position').value;
+      state.players[i].status = row.querySelector('.f-status').value;
+      state.players[i].age = age === '' ? null : Number(age);
+      state.players[i].height = height === '' ? null : Number(height);
+      state.players[i].transferValue = row.querySelector('.f-value').value || null;
+      state.players[i].nationality = row.querySelector('.f-nationality').value || null;
+      state.players[i].biography = row.querySelector('.f-bio').value;
+      state.players[i].note = row.querySelector('.f-note').value || null;
+    });
+  }
+
   window.addPlayerRow = () => {
+    syncSquadFormToState();
     state.players.push({
       id: `manual_${Date.now()}`,
       name: '',
@@ -1325,27 +1354,20 @@
   };
 
   window.removePlayerRow = (index) => {
+    syncSquadFormToState();
     state.players.splice(index, 1);
     renderManageSquad();
   };
 
   window.saveSquad = async () => {
-    const rows = el('manageSquadArea').querySelectorAll('.edit-row');
-    rows.forEach(row => {
-      const i = Number(row.dataset.index);
-      const num = row.querySelector('.f-number').value;
-      const age = row.querySelector('.f-age').value;
-      const height = row.querySelector('.f-height').value;
-      state.players[i].squadNumber = num === '' ? null : Number(num);
-      state.players[i].name = row.querySelector('.f-name').value.trim();
-      state.players[i].position = row.querySelector('.f-position').value;
-      state.players[i].status = row.querySelector('.f-status').value;
-      state.players[i].age = age === '' ? null : Number(age);
-      state.players[i].height = height === '' ? null : Number(height);
-      state.players[i].transferValue = row.querySelector('.f-value').value.trim() || null;
-      state.players[i].nationality = row.querySelector('.f-nationality').value || null;
-      state.players[i].biography = row.querySelector('.f-bio').value.trim();
-      state.players[i].note = row.querySelector('.f-note').value.trim() || null;
+    syncSquadFormToState();
+    // Trim now, at the point of saving, rather than on every keystroke sync —
+    // avoids fighting the cursor position while someone's still typing.
+    state.players.forEach(p => {
+      p.name = (p.name || '').trim();
+      p.transferValue = p.transferValue ? p.transferValue.trim() || null : null;
+      p.biography = (p.biography || '').trim();
+      p.note = p.note ? p.note.trim() || null : null;
     });
 
     const pin = el('ownerPin').value;
@@ -1361,6 +1383,7 @@
       if (!res.ok) throw new Error(data.error || 'Save failed');
       el('manageStatus').textContent = 'Saved.';
       el('manageStatus').className = 'status ok';
+      renderManageSquad();
       renderSquadList();
     } catch (err) {
       el('manageStatus').textContent = `Failed: ${err.message}`;
