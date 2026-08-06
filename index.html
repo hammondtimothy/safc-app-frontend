@@ -545,7 +545,7 @@
     ["Norway","NO"],["Sweden","SE"],["Finland","FI"],["Iceland","IS"],["Poland","PL"],["Czech Republic","CZ"],
     ["Slovakia","SK"],["Hungary","HU"],["Romania","RO"],["Croatia","HR"],["Serbia","RS"],["Slovenia","SI"],
     ["Bosnia and Herzegovina","BA"],["Montenegro","ME"],["North Macedonia","MK"],["Albania","AL"],["Kosovo","XK"],
-    ["Greece","GR"],["Turkey","TR"],["Ukraine","UA"],["Russia","RU"],["Ghana","GH"],["Nigeria","NG"],
+    ["Greece","GR"],["Turkey","TR"],["Armenia","AM"],["Ukraine","UA"],["Russia","RU"],["Ghana","GH"],["Nigeria","NG"],
     ["Senegal","SN"],["Ivory Coast","CI"],["Mali","ML"],["Guinea","GN"],["DR Congo","CD"],["Cameroon","CM"],
     ["Morocco","MA"],["Algeria","DZ"],["Tunisia","TN"],["Egypt","EG"],["South Africa","ZA"],["Mozambique","MZ"],["Brazil","BR"],
     ["Argentina","AR"],["Uruguay","UY"],["Paraguay","PY"],["Colombia","CO"],["Chile","CL"],["USA","US"],
@@ -580,12 +580,28 @@
       <path d="M16,16 L8,13 L14,20 Z" fill="#C8102E"/>
       <path d="M27,20 L24,24" stroke="#C8102E" stroke-width="1.5" fill="none"/>
     </svg>`,
+    // Northern Ireland has no official flag today — this is the Ulster Banner
+    // (white field, red St George's cross, Red Hand of Ulster), the flag
+    // conventionally used to represent Northern Ireland in football contexts.
+    'GB-NIR': `<svg viewBox="0 0 60 36" width="1.5em" height="0.9em" style="vertical-align:-0.1em;flex-shrink:0;">
+      <rect width="60" height="36" fill="#FFFFFF"/>
+      <rect x="26" width="8" height="36" fill="#CE1124"/>
+      <rect y="14" width="60" height="8" fill="#CE1124"/>
+      <circle cx="30" cy="18" r="8" fill="#FFFFFF" stroke="#CE1124" stroke-width="1"/>
+      <g stroke="#CE1124" stroke-width="1.6" stroke-linecap="round" fill="none">
+        <path d="M30,23 L30,13"/>
+        <path d="M26.5,23 L25,14.5"/>
+        <path d="M33.5,23 L35,14.5"/>
+        <path d="M23.5,23 L21,17"/>
+        <path d="M36.5,23 L39,17"/>
+        <path d="M23.5,23 L36.5,23"/>
+      </g>
+    </svg>`,
   };
 
   function flagEmoji(code) {
     if (!code) return '';
     if (HOME_NATION_FLAG_SVGS[code]) return HOME_NATION_FLAG_SVGS[code];
-    if (code === 'GB-NIR') return '🇬🇧';
     if (code === 'XK') return '🇽🇰';
     return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
   }
@@ -597,7 +613,7 @@
     if (code === 'GB-ENG') return 'ENG';
     if (code === 'GB-SCT') return 'SCO';
     if (code === 'GB-WLS') return 'WAL';
-    if (code === 'GB-NIR') return '🇬🇧';
+    if (code === 'GB-NIR') return 'NIR';
     if (code === 'XK') return '🇽🇰';
     return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
   }
@@ -886,6 +902,18 @@
   // ---- Player detail overlay (Stage 4) ----
 
   // Player initials for the photo fallback badge, e.g. "A. Patterson" -> "AP".
+  // Height is entered and stored in cm (matches FotMob and every other
+  // source), but displayed as feet/inches, which is what most of the family
+  // will actually picture.
+  function formatHeight(cm) {
+    if (cm === null || cm === undefined) return null;
+    const totalInches = cm / 2.54;
+    let feet = Math.floor(totalInches / 12);
+    let inches = Math.round(totalInches - feet * 12);
+    if (inches === 12) { feet += 1; inches = 0; }
+    return `${feet}' ${inches}"`;
+  }
+
   function playerInitials(name) {
     if (!name) return '?';
     const parts = name.replace(/\./g, '').split(/\s+/).filter(Boolean);
@@ -1091,7 +1119,7 @@
             <div style="font-weight:700;font-size:16px;">${flagEmoji(player.nationality)} ${escapeHtml(player.name)}</div>
             <div class="player-meta-line">${[
               player.age ? player.age + ' years old' : null,
-              player.height ? player.height + ' cm' : null,
+              player.height ? formatHeight(player.height) : null,
             ].filter(Boolean).join(' · ') || 'Age/height unknown'}</div>
             ${player.transferValue ? `<div class="player-meta-line">Market value: ${escapeHtml(player.transferValue)}</div>` : ''}
             <span class="badge ${player.status}" style="margin-top:6px;display:inline-block;">${player.status}</span>
@@ -1283,6 +1311,10 @@
           </div>
         </div>
         <div class="field-group">
+          <label class="field-label">Photo URL</label>
+          <input type="text" class="f-photo" value="${escapeHtml(p.photo || '')}" placeholder="Link to a photo you have the rights to use" />
+        </div>
+        <div class="field-group">
           <label class="field-label">Nationality</label>
           <select class="f-nationality">
             <option value="">— Nationality —</option>
@@ -1327,6 +1359,7 @@
       state.players[i].age = age === '' ? null : Number(age);
       state.players[i].height = height === '' ? null : Number(height);
       state.players[i].transferValue = row.querySelector('.f-value').value || null;
+      state.players[i].photo = row.querySelector('.f-photo').value || null;
       state.players[i].nationality = row.querySelector('.f-nationality').value || null;
       state.players[i].biography = row.querySelector('.f-bio').value;
       state.players[i].note = row.querySelector('.f-note').value || null;
@@ -1366,6 +1399,7 @@
     state.players.forEach(p => {
       p.name = (p.name || '').trim();
       p.transferValue = p.transferValue ? p.transferValue.trim() || null : null;
+      p.photo = p.photo ? p.photo.trim() || null : null;
       p.biography = (p.biography || '').trim();
       p.note = p.note ? p.note.trim() || null : null;
     });
