@@ -444,6 +444,17 @@
     margin-top: 3px;
   }
   .fixture-row .teams { font-weight: 600; }
+  .fixture-row .venue-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 4px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
   .fixture-row .datetime { color: var(--muted); font-size: 13px; }
   .fixture-row .score {
     font-weight: 700;
@@ -792,14 +803,13 @@
       return;
     }
     const last = played[0];
-    const opponent = last.isHome ? last.awayTeam : last.homeTeam;
     const venueTag = last.isHome ? 'H' : 'A';
     card.innerHTML = `
       <div class="hero-card">
         ${crestMarkup()}
         <div class="hero-label">Last result</div>
-        <div class="hero-teams">${venueTag} vs ${escapeHtml(opponent)}</div>
-        <div class="hero-meta">${last.homeScore}-${last.awayScore} · ${formatFixtureDate(last.date).split(',')[0]}</div>
+        <div class="hero-teams"><span class="venue-tag" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:white;">${venueTag}</span> ${escapeHtml(last.homeTeam)} v ${escapeHtml(last.awayTeam)}</div>
+        <div class="hero-meta">${last.homeScore} - ${last.awayScore} · ${formatFixtureDate(last.date).split(',')[0]}</div>
       </div>
     `;
   }
@@ -1189,7 +1199,6 @@
       return;
     }
     container.innerHTML = state.fixtures.map(f => {
-      const opponent = f.isHome ? f.awayTeam : f.homeTeam;
       const venueTag = f.isHome ? 'H' : 'A';
       let scoreOrTime;
       if (['FT', 'AET', 'PEN'].includes(f.status)) {
@@ -1201,11 +1210,17 @@
       } else {
         scoreOrTime = `<span class="datetime">${formatFixtureDate(f.date)}</span>`;
       }
+      // Always home team first, away team second — matches the order the
+      // score is shown in, so "2 - 1" can never be misread as which side
+      // scored what. Sunderland's own name is bolded so it's still easy to
+      // spot at a glance regardless of which side it's on.
+      const homeLabel = f.isHome ? `<span style="color:var(--safc-red);">${escapeHtml(f.homeTeam)}</span>` : escapeHtml(f.homeTeam);
+      const awayLabel = f.isHome ? escapeHtml(f.awayTeam) : `<span style="color:var(--safc-red);">${escapeHtml(f.awayTeam)}</span>`;
       return `
         <div class="fixture-row">
           <div class="comp">${escapeHtml(f.competition)}${f.round ? ' · ' + escapeHtml(f.round) : ''}</div>
           <div class="match-line">
-            <span class="teams">${venueTag} vs ${escapeHtml(opponent)}</span>
+            <span class="teams"><span class="venue-tag">${venueTag}</span> ${homeLabel} v ${awayLabel}</span>
             ${scoreOrTime}
           </div>
         </div>
