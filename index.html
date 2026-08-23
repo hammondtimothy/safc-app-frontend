@@ -1772,6 +1772,22 @@
           } else if (surnameMatches.length > 1) {
             ambiguous.push(`${rec.name} (could be: ${surnameMatches.map(r => r.dataset.playerName).join(' / ')})`);
             return;
+          } else {
+            // 3. fallback: match by first name / mononym. Some players go by
+            // their first name professionally (e.g. Reinildo, for Reinildo
+            // Mandava) rather than their surname — surname matching alone
+            // would never find these, so try the first word too. Same
+            // ambiguity rule: only auto-applies if exactly one match.
+            const targetFirst = target.split(/\s+/)[0];
+            const firstNameMatches = rows.filter(r =>
+              normalize(r.dataset.playerName.toLowerCase().trim()).split(/\s+/)[0] === targetFirst
+            );
+            if (firstNameMatches.length === 1) {
+              row = firstNameMatches[0];
+            } else if (firstNameMatches.length > 1) {
+              ambiguous.push(`${rec.name} (could be: ${firstNameMatches.map(r => r.dataset.playerName).join(' / ')})`);
+              return;
+            }
           }
         }
       }
