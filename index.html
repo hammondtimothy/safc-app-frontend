@@ -437,13 +437,6 @@
     letter-spacing: 0.6px;
     color: var(--muted);
   }
-  .fixture-row .match-line {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 3px;
-  }
-  .fixture-row .teams { font-weight: 600; }
   .fixture-row .venue-tag {
     display: inline-block;
     font-size: 10px;
@@ -456,9 +449,19 @@
     vertical-align: middle;
   }
   .fixture-row .datetime { color: var(--muted); font-size: 13px; }
-  .fixture-row .score {
+  .fixture-team-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-weight: 600;
+    margin-top: 3px;
+  }
+  .fixture-team-row.sun-team { color: var(--safc-red); }
+  .fixture-team-row .score {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
 </style>
 </head>
@@ -1199,30 +1202,32 @@
       return;
     }
     container.innerHTML = state.fixtures.map(f => {
-      const venueTag = f.isHome ? 'H' : 'A';
-      let scoreOrTime;
-      if (['FT', 'AET', 'PEN'].includes(f.status)) {
-        scoreOrTime = `<span class="score">${f.homeScore} - ${f.awayScore}</span>`;
-      } else if (f.status === 'PST') {
-        scoreOrTime = '<span class="datetime">Postponed</span>';
+      const played = ['FT', 'AET', 'PEN'].includes(f.status);
+      let statusLine = '';
+      if (f.status === 'PST') {
+        statusLine = '<div class="datetime" style="margin-top:4px;">Postponed</div>';
       } else if (f.status === 'CANC') {
-        scoreOrTime = '<span class="datetime">Cancelled</span>';
-      } else {
-        scoreOrTime = `<span class="datetime">${formatFixtureDate(f.date)}</span>`;
+        statusLine = '<div class="datetime" style="margin-top:4px;">Cancelled</div>';
+      } else if (!played) {
+        statusLine = `<div class="datetime" style="margin-top:4px;">${formatFixtureDate(f.date)}</div>`;
       }
-      // Always home team first, away team second — matches the order the
-      // score is shown in, so "2 - 1" can never be misread as which side
-      // scored what. Sunderland's own name is bolded so it's still easy to
-      // spot at a glance regardless of which side it's on.
-      const homeLabel = f.isHome ? `<span style="color:var(--safc-red);">${escapeHtml(f.homeTeam)}</span>` : escapeHtml(f.homeTeam);
-      const awayLabel = f.isHome ? escapeHtml(f.awayTeam) : `<span style="color:var(--safc-red);">${escapeHtml(f.awayTeam)}</span>`;
+      // Stacked layout — home team + its score on one line, away team + its
+      // score on the next — rather than one long "Team A v Team B  2 - 1"
+      // line, which wraps awkwardly once full team names don't fit a phone
+      // screen width. Sunderland's own row is coloured so it's still easy
+      // to spot regardless of whether it's playing home or away.
       return `
         <div class="fixture-row">
           <div class="comp">${escapeHtml(f.competition)}${f.round ? ' · ' + escapeHtml(f.round) : ''}</div>
-          <div class="match-line">
-            <span class="teams"><span class="venue-tag">${venueTag}</span> ${homeLabel} v ${awayLabel}</span>
-            ${scoreOrTime}
+          <div class="fixture-team-row${f.isHome ? ' sun-team' : ''}">
+            <span>${escapeHtml(f.homeTeam)}</span>
+            <span class="score">${played ? f.homeScore : ''}</span>
           </div>
+          <div class="fixture-team-row${!f.isHome ? ' sun-team' : ''}">
+            <span>${escapeHtml(f.awayTeam)}</span>
+            <span class="score">${played ? f.awayScore : ''}</span>
+          </div>
+          ${statusLine}
         </div>
       `;
     }).join('');
