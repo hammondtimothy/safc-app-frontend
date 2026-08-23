@@ -1738,15 +1738,42 @@
 
     let matched = 0;
     const unmatched = [];
+    const ambiguous = [];
     parsed.forEach(rec => {
       let row = null;
+      const rows = Array.from(el('msPlayerRows').querySelectorAll('.edit-row'));
+
       if (rec.playerId) {
-        row = el('msPlayerRows').querySelector(`.edit-row[data-player-id="${rec.playerId}"]`);
+        row = rows.find(r => r.dataset.playerId === rec.playerId);
       }
       if (!row && rec.name) {
-        const target = String(rec.name).toLowerCase();
-        row = Array.from(el('msPlayerRows').querySelectorAll('.edit-row'))
-          .find(r => r.dataset.playerName.toLowerCase() === target);
+        // Strip accents before comparing — "Fée" vs "Fee", "Núñez" vs "Nunez"
+        // shouldn't fail to match just because one side has diacritics and
+        // the other doesn't; neither Claude's guess nor Tim's own typing is
+        // reliably consistent about this.
+        const normalize = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const target = normalize(String(rec.name).toLowerCase().trim());
+        // 1. exact full-name match
+        row = rows.find(r => normalize(r.dataset.playerName.toLowerCase().trim()) === target);
+
+        // 2. fallback: match by surname only. Claude doesn't have visibility
+        // into how names are actually entered in Manage Squad (full name vs
+        // "T. Meunier" style vs anything else), and that can change as the
+        // squad changes — matching on the last word only is far more
+        // resilient to that than requiring an exact full-string match.
+        // Only auto-applies when exactly one player shares that surname.
+        if (!row) {
+          const targetSurname = target.split(/\s+/).pop();
+          const surnameMatches = rows.filter(r =>
+            normalize(r.dataset.playerName.toLowerCase().trim()).split(/\s+/).pop() === targetSurname
+          );
+          if (surnameMatches.length === 1) {
+            row = surnameMatches[0];
+          } else if (surnameMatches.length > 1) {
+            ambiguous.push(`${rec.name} (could be: ${surnameMatches.map(r => r.dataset.playerName).join(' / ')})`);
+            return;
+          }
+        }
       }
       if (!row) { unmatched.push(rec.playerId || rec.name || '?'); return; }
 
@@ -1763,10 +1790,13 @@
       matched++;
     });
 
-    el('msJsonStatus').textContent = unmatched.length
-      ? `Filled ${matched} row(s). Couldn't match: ${unmatched.join(', ')}`
+    const problems = [];
+    if (unmatched.length) problems.push(`Couldn't match: ${unmatched.join(', ')}`);
+    if (ambiguous.length) problems.push(`Ambiguous (please fill by hand): ${ambiguous.join('; ')}`);
+    el('msJsonStatus').textContent = problems.length
+      ? `Filled ${matched} row(s). ${problems.join(' ')}`
       : `Filled ${matched} row(s) from JSON. Review below, then Save.`;
-    el('msJsonStatus').className = unmatched.length ? 'status err' : 'status ok';
+    el('msJsonStatus').className = problems.length ? 'status err' : 'status ok';
   };
 
   // Wipes every match-stats record for every fixture — deliberately blunt (no
