@@ -131,6 +131,50 @@
   .lg-pos { color: var(--muted); font-variant-numeric: tabular-nums; }
   .lg-col { text-align: center; font-variant-numeric: tabular-nums; }
   .lg-pts { font-weight: 700; }
+
+  /* Small pill-style toggle — used for the Stats-tab competition scope
+     switch (PL only / All competitions). */
+  .scope-toggle {
+    display: flex;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 3px;
+    margin-bottom: 12px;
+  }
+  .scope-toggle button {
+    flex: 1;
+    border: none;
+    background: none;
+    padding: 8px 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .scope-toggle button.active { background: var(--safc-red); color: white; }
+
+  .uel-record-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .uel-record-line { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .uel-record-line b { color: var(--ink); }
+  .uel-match-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .uel-match-row:last-child { border-bottom: none; }
+  .uel-match-row .venue-mini { color: var(--muted); width: 16px; flex-shrink: 0; }
+  .uel-match-row .opp { flex: 1; }
+  .uel-match-row .result { font-variant-numeric: tabular-nums; color: var(--muted); }
   main {
     max-width: 480px;
     margin: 0 auto;
@@ -492,6 +536,7 @@
     <section id="tab-home">
       <div id="nextFixtureCard"></div>
       <div class="card" id="leagueTableCard"></div>
+      <div class="card" id="europaLeagueCard" style="display:none;"></div>
       <div class="card">
         <p class="eyebrow">Post a comment</p>
         <textarea id="commentText" placeholder="Say something about the Lads…"></textarea>
@@ -550,7 +595,7 @@
 
 <script src="config.js"></script>
 <script>
-  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [], fixtures: [], matchStats: [] };
+  const state = { name: localStorage.getItem('safc_name') || null, config: null, players: [], comments: [], fixtures: [], matchStats: [], statsScope: 'all' };
 
   const COUNTRIES = [
     ["England","GB-ENG"],["Scotland","GB-SCT"],["Wales","GB-WLS"],["Northern Ireland","GB-NIR"],
@@ -828,13 +873,22 @@
 
     const rows = state.players
       .filter(p => p.status !== 'left')
-      .map(p => ({ player: p, stats: computeSeasonStats(p) }))
+      .map(p => ({ player: p, stats: computeSeasonStats(p, state.statsScope) }))
       .filter(r => r.stats.appearances > 0);
 
+    const toggleHtml = `
+      <div class="scope-toggle">
+        <button class="${state.statsScope === 'all' ? 'active' : ''}" onclick="setStatsScope('all')">All competitions</button>
+        <button class="${state.statsScope === 'pl' ? 'active' : ''}" onclick="setStatsScope('pl')">Premier League only</button>
+      </div>
+    `;
+
     if (!rows.length) {
-      status.textContent = 'No match stats recorded yet this season.';
+      status.textContent = state.statsScope === 'pl'
+        ? 'No Premier League match stats recorded yet this season.'
+        : 'No match stats recorded yet this season.';
       status.className = 'status';
-      container.innerHTML = '';
+      container.innerHTML = toggleHtml;
       return;
     }
 
@@ -843,6 +897,7 @@
     rows.sort((a, b) => (b.stats.avgRating ?? 0) - (a.stats.avgRating ?? 0));
 
     container.innerHTML = `
+      ${toggleHtml}
       <div class="stats-table-header">
         <span></span>
         <span>Player</span>
@@ -863,6 +918,12 @@
       `).join('')}
     `;
   }
+
+  window.setStatsScope = (scope) => {
+    if (state.statsScope === scope) return;
+    state.statsScope = scope;
+    renderStatsTab();
+  };
 
   const POSITION_ORDER = ['GK', 'DEF', 'MID', 'FWD'];
   const POSITION_LABELS = { GK: 'Goalkeepers', DEF: 'Defenders', MID: 'Midfielders', FWD: 'Forwards' };
@@ -937,8 +998,18 @@
   // Season stats are never stored — always recomputed from data/match-stats.json
   // plus data/fixtures.json, so corrections to either source are reflected
   // immediately without any separate "recalculate" step.
-  function computeSeasonStats(player) {
-    const records = state.matchStats.filter(r => r.playerId === player.id);
+  // scope: 'all' (default) sums every competition; 'pl' restricts to
+  // Premier League fixtures only — matched against fixture.competition
+  // rather than storing a scope flag on the match-stats records themselves,
+  // keeping the same "derive don't store" pattern used everywhere else.
+  function computeSeasonStats(player, scope = state.statsScope) {
+    let records = state.matchStats.filter(r => r.playerId === player.id);
+    if (scope === 'pl') {
+      records = records.filter(r => {
+        const fixture = state.fixtures.find(f => f.id === r.matchId);
+        return fixture && fixture.competition === 'Premier League';
+      });
+    }
     const appeared = records.filter(r => r.appearance === 'start' || r.appearance === 'sub');
 
     const sum = (key) => appeared.reduce((total, r) => total + (r[key] || 0), 0);
@@ -1090,6 +1161,81 @@
     `;
   }
 
+  // Europa League record — deliberately NOT a 36-club standings table.
+  // football-data.org's free tier doesn't cover the Europa League (only
+  // 12 named competitions), so rather than add a paid dependency this is
+  // derived entirely from Sunderland's own 8 fixtures, same "derive don't
+  // store" pattern as clean sheets/goals conceded.
+  function computeEuropaLeagueRecord() {
+    const matches = state.fixtures.filter(f => f.competition === 'UEFA Europa League');
+    const played = matches.filter(f => ['FT', 'AET', 'PEN'].includes(f.status));
+    const record = { total: matches.length, played: played.length, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 };
+    played.forEach(f => {
+      const gf = f.isHome ? f.homeScore : f.awayScore;
+      const ga = f.isHome ? f.awayScore : f.homeScore;
+      if (gf === null || gf === undefined || ga === null || ga === undefined) return;
+      record.gf += gf;
+      record.ga += ga;
+      if (gf > ga) { record.won++; record.points += 3; }
+      else if (gf === ga) { record.drawn++; record.points += 1; }
+      else { record.lost++; }
+    });
+    return record;
+  }
+
+  function renderEuropaLeagueCard() {
+    const card = el('europaLeagueCard');
+    if (!card) return;
+    const uelFixtures = state.fixtures.filter(f => f.competition === 'UEFA Europa League');
+    if (!uelFixtures.length) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = 'block';
+    const record = computeEuropaLeagueRecord();
+    const gd = record.gf - record.ga;
+
+    const matchRows = uelFixtures.slice()
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map(f => {
+        const opponent = f.isHome ? f.awayTeam : f.homeTeam;
+        const venueTag = f.isHome ? 'H' : 'A';
+        const played = ['FT', 'AET', 'PEN'].includes(f.status);
+        const result = played
+          ? `${f.homeScore} - ${f.awayScore}`
+          : formatFixtureDate(f.date).split(',')[0];
+        return `
+          <div class="uel-match-row">
+            <span class="venue-mini">${venueTag}</span>
+            <span class="opp">${escapeHtml(opponent)}</span>
+            <span class="result">${result}</span>
+          </div>
+        `;
+      }).join('');
+
+    card.innerHTML = `
+      <div class="uel-record-summary">
+        <p class="eyebrow" style="margin:0;">Europa League</p>
+        <a href="#" id="toggleUelLink" style="font-size:13px;color:var(--safc-red);font-weight:600;text-decoration:none;">Details</a>
+      </div>
+      <div class="uel-record-line">
+        League phase (${record.total} matches) &middot; <b>${record.played}</b> played &middot;
+        <b>${record.won}W ${record.drawn}D ${record.lost}L</b> &middot;
+        GD ${gd > 0 ? '+' : ''}${gd} &middot; <b>${record.points} pts</b>
+      </div>
+      <div id="uelMatchList" style="display:none;margin-top:10px;">${matchRows}</div>
+    `;
+
+    const toggleLink = el('toggleUelLink');
+    toggleLink.onclick = (e) => {
+      e.preventDefault();
+      const list = el('uelMatchList');
+      const isOpen = list.style.display === 'block';
+      list.style.display = isOpen ? 'none' : 'block';
+      toggleLink.textContent = isOpen ? 'Details' : 'Hide';
+    };
+  }
+
   window.openPlayerDetail = (playerId) => {
     const player = state.players.find(p => p.id === playerId);
     if (!player) return;
@@ -1142,7 +1288,7 @@
       </div>
 
       <div class="card">
-        <p class="eyebrow">2026-27 season</p>
+        <p class="eyebrow">2026-27 season ${state.statsScope === 'pl' ? '&middot; Premier League only' : '&middot; all competitions'}</p>
         <div class="stat-grid">${statCells.join('')}</div>
       </div>
 
@@ -1190,6 +1336,7 @@
       state.fixtures = await apiGet('data/fixtures.json') || [];
       renderFixturesList();
       renderNextFixtureCard();
+      renderEuropaLeagueCard();
     } catch (err) {
       el('fixturesList').innerHTML = `<div class="empty">Couldn't load fixtures (${err.message})</div>`;
     }
